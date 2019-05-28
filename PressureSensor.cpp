@@ -1,55 +1,79 @@
-#include "pressureSense.h"
+#include "pressureSensor.h"
 
 void PressureSensor::begin()
 {
-  _capSense.begin(); // Moving average
+  capSense.begin(); // Moving average
   discharge();
 
   // Fill average buffer
-  for (int i = 0; i < _numAvg; ++i) {
+  for (int i = 0; i < numAvg; ++i) {
     unsigned long start_time = micros(); // Start timer
-    digitalWrite(_outputpin, HIGH);
-    int capval = analogRead(_inputpin);
+    digitalWrite(outputpin, HIGH);
+    int capval = analogRead(inputpin);
     static int avg;
-    while (capval < 800) {
-      capval = analogRead(_inputpin);
+    while (capval < CAPTHRESHOLD) {
+      capval = analogRead(inputpin);
       if (micros() - start_time > TIMEOUT_MICROS) break;
     }
     unsigned long stop_time = micros();
-    _capChargeTime = _capSense.reading(stop_time - start_time);
+    capChargeTime = capSense.reading(stop_time - start_time);
     discharge();
-    _zeroPressureTime = _capChargeTime;
+    zeroPressureTime = capChargeTime;
   }
 }
 
 void PressureSensor::discharge()
 {
-  pinMode(_outputpin, OUTPUT);
-  digitalWrite(_outputpin, LOW);
-  pinMode(_inputpin, OUTPUT);
-  digitalWrite(_inputpin, LOW);
+  pinMode(outputpin, OUTPUT);
+  digitalWrite(outputpin, LOW);
+  pinMode(inputpin, OUTPUT);
+  digitalWrite(inputpin, LOW);
   delay(1);
-  pinMode(_inputpin, INPUT);
+  pinMode(inputpin, INPUT);
 }
 
-int PressureSensor::getPressure()
+uint16_t PressureSensor::pressure()
 {
   int retval = 0;
   unsigned long start_time = micros(); // Start timer
-  digitalWrite(_outputpin, HIGH);
-  int capval = analogRead(_inputpin);
+  digitalWrite(outputpin, HIGH);
+  int capval = analogRead(inputpin);
   static int avg;
-  while (capval < 800) {
-    capval = analogRead(_inputpin);
+  while (capval < CAPTHRESHOLD) {
+    capval = analogRead(inputpin);
     if (micros() - start_time > TIMEOUT_MICROS) break;
   }
   unsigned long stop_time = micros();
-  _capChargeTime = _capSense.reading(stop_time - start_time);
+  capChargeTime = capSense.reading(stop_time - start_time);
   discharge();
-  retval = _capChargeTime - _zeroPressureTime;
+  retval = capChargeTime - zeroPressureTime;
 
   if (retval < 0) retval = 0;
   else if (retval > MAXVAL) retval = MAXVAL;
 
   return retval;
+}
+
+void PressureSensor::run()
+{
+  static unsigned long pressureMillis = 0;
+  static unsigned long prev_pressureMillis = 0;
+
+  pressureMillis = millis();
+  if (pressureMillis - prev_pressureMillis > PRESSURE_CHECK_DELAY) {
+    uint16_t pressure_val = pressure();
+    
+    if (clench_flag == true) {
+      if (pressure_val <= clenchThreshold) {
+        clench_flag = false;
+        event_release(pressure());
+      }
+    }
+    else {
+      if (pressure_val > clenchThreshold) {
+        clench_flag = true;
+        event_clench(pressure());
+      }
+    }
+  }
 }
