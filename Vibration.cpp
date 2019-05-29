@@ -50,6 +50,7 @@ void Vibration::append(VibrationElement element)
 {
   if (num_elements < MAX_ELEMENTS) {
     elements[num_elements++] = element;
+  } else {
   }
 }
 
@@ -96,7 +97,7 @@ void Vibration::go()
     }
     else {
       analogWrite(pin_number, nextval);
-      Serial.println(nextval);
+      //Serial.println(nextval);
     }
   }
 }

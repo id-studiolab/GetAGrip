@@ -4,6 +4,9 @@
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <AceButton.h>
+//#include <SD.h>
+#include <Wire.h>
+#include "DS1307.h"     // RTC
 #include "Fsm.h"
 #include "EventQueue.h"
 #include "PressureSensor.h"
@@ -13,6 +16,7 @@
 using namespace ace_button;
 
 // PIN definitions
+const int CHIPSELECT_PIN  = 4;
 const int BUTTONGREEN_PIN = 2;
 const int BUTTONBLACK_PIN = 3;
 const int BUTTONWHITE_PIN = 6;
@@ -29,6 +33,9 @@ AceButton button_green(BUTTONGREEN_PIN);  // MOCK SIGNAL: CHALLENGE_DETECTED
 AceButton button_white(BUTTONWHITE_PIN);  // This button is actually in the design: CHALLENGE_BUTTON_ACTIVATED
 AceButton button_blue(BUTTONBLUE_PIN);    // MOCK SIGNAL: INACTIVITY_DETECTED
 AceButton button_red(BUTTONRED_PIN);      // MOCK SIGNAL: STRESS_DETECTED
+
+// Realtime Clock
+DS1307 clock;
 
 // State machine
 const int STRESS_DETECTED = 1;
@@ -83,7 +90,7 @@ VibrationElement rampDown     (100, 10,  1,  &vib_rampdown); //  goes from MAX t
 VibrationElement sawtoothDown (100, 2,   5,  &vib_rampdown); //  rampdown many times
 //  example of a combined ramp-up and ramp-down in one function.
 //   It's easier to seperate this behaviour in multiple functions for clarity
-VibrationElement piramid      (100, 5,  10,  &vib_piramid);  
+VibrationElement piramid      (100, 5,  10,  &vib_piramid);
 
 Vibration vibStressAlarm(VIBRATOR_PIN);     // These vibration patterns are assembled in setup();
 Vibration vibChallengeAlarm(VIBRATOR_PIN);
@@ -100,6 +107,7 @@ MillisTimer telemetryTimer = MillisTimer(5000); // Take a snapshot of all the da
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 void setup() {
+  pinMode(CHIPSELECT_PIN, OUTPUT);
   pinMode(BUTTONGREEN_PIN, INPUT);
   pinMode(BUTTONWHITE_PIN, INPUT);
   pinMode(BUTTONBLUE_PIN, INPUT);
@@ -109,6 +117,17 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println("Arduino started");
+
+//  if (!SD.begin(CHIPSELECT_PIN)) {
+//    Serial.println("ERROR: NO SDCARD DETECTED!");
+//  } else {
+//  }
+
+  clock.begin();
+  clock.fillByYMD(2019, 5, 29);
+  clock.fillByHMS(13, 03, 30);
+  clock.fillDayOfWeek(WED);
+  clock.setTime();
 
   // MOCK signals (should be coming over BlueTooth,
   // being faked by buttons at this moment)
@@ -136,7 +155,7 @@ void setup() {
   // Pressure sensor
   // To calibrate the pressure sensor, whear the glove, relax your hand
   // and reset or power-cycle the glove.
-  pressureSense.begin(); 
+  pressureSense.begin();
 
   // Heartrate sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
@@ -230,7 +249,7 @@ void telemetryTimer_handler(MillisTimer &mt)
 
 void on_clench(uint16_t pressure)
 {
-  // This will be invoked when we detect that the user is clenching his fist 
+  // This will be invoked when we detect that the user is clenching his fist
   // for a (configurable) while. Check PressureSensor.h to configure this.
   Serial.print("CLENCH EVENT: "); Serial.println(pressure);
   events.push(CLENCH_ACTIVATED);
@@ -316,6 +335,7 @@ void on_challenge_exit() {
 void on_selfreport() {
   check_triggers();
 }
+
 void on_selfreport_enter() {
   Serial.println("Selfreport enter");
 }
@@ -444,4 +464,61 @@ uint16_t vib_piramid(uint16_t x, uint16_t max_x)
   }
 }
 
+//void logToSDcard()
+//{
+//  // Compile filename for SD card logging (YYYY-MM-DD_HH)
+//  clock.getTime();
+//  String filename = String(clock.year);
+//
+//  filename += ZeroPad(clock.month);
+//  filename += ZeroPad(clock.dayOfMonth);
+//  filename += ZeroPad(clock.hour);
+//  filename += F(".csv");
+//
+//  // open the file. note that only one file can be open at a time,
+//  // so you have to close this one before opening another.
+//  File dataFile = SD.open(filename.c_str(), FILE_WRITE);
+//
+//  if (dataFile) {
+//    // Timestamp
+//    dataFile.print(clock.year + 2000, DEC);
+//    dataFile.print('-');
+//    dataFile.print(ZeroPad(clock.month));
+//    dataFile.print('-');
+//    dataFile.print(ZeroPad(clock.dayOfMonth));
+//    dataFile.print(',');
+//    dataFile.print(ZeroPad(clock.hour));
+//    dataFile.print(':');
+//    dataFile.print(ZeroPad(clock.minute));
+//    dataFile.print(':');
+//    dataFile.print(ZeroPad(clock.second));
+//
+//    // Datafields
+//    dataFile.print(',');
+//    dataFile.print(12, DEC); // data
+//
+//    // Newline at end of file
+//    dataFile.println();
+//  }
+//  else
+//  {
+//  }
+//
+//  dataFile.close();
+//}
+
+///////////////////////////////////////////////////////////////////////////////
+//                                                                           //
+// Returns a zero padded string based on a two-digit input value             //
+//                                                                           //
+// Input:  a single- or double digit number                                  //
+// Output: if the input was a single digit number, the output will have a    //
+//         leading zero. Otherwise the double digit number will be returned  //
+//                                                                           //
+///////////////////////////////////////////////////////////////////////////////
+String ZeroPad(int value)
+{
+  String returnVal = (value > 9 ? "" : String(F("0"))) + String(value);
+  return returnVal;
+}
 // Are you still reading this?

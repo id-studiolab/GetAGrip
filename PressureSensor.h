@@ -12,7 +12,7 @@ class PressureSensor {
 
     PressureSensor(int outputpin, int inputpin, uint16_t clenchThreshold, 
                    void (*fpclench)(uint16_t value), void (*fprelease)(uint16_t value), 
-                   int numavg = 40)
+                   int numavg = 20)
       : outputpin(outputpin), inputpin(inputpin), capSense(numavg), numAvg(numavg), isClenching(false),
         clenchThreshold(clenchThreshold), event_clench(fpclench), event_release(fprelease) {}
     void begin();
