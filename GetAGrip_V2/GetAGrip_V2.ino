@@ -17,10 +17,9 @@
 #include "arduino_bma456.h"  //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <RTClib.h>
 #include <Wire.h>
-#include "PressureSensor.h"
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include <SoftwareSerial.h> //We are going to use software serial to communicate over Bluetooth through UART protocol
-
+#include "PressureSensor.h"
 
 // Debug and Test options
 #define _DEBUG_
@@ -34,21 +33,25 @@
 #define _PL(a)
 #endif
 
+//Bluetooth
+HM1X_BT bt;
+//#define Serial Serial;
+
 //Defining All the functions
 void initializeAllSensor();
-void hrCallback();
+void initBLE();
+void rtcClock();
+int hrCallback();
 void acceCallback();
+void pressCallback();
 void bleCallback();
 void vibCallback();
 void on_clench(uint16_t pressure);
 void on_release(uint16_t pressure);
 
-//Bluetooth
-HM1X_BT bt;
-SoftwareSerial btSerial(3, 4);
-
 // Heartrate
-const int HEARTRATE_PIN = 3;
+const int HEARTRATE_PIN = 0;
+const int LED13 = 13; 
 const int HEARTRATE_THRESHOLD = 550;
 PulseSensorPlayground pulseSensor;
 
@@ -88,17 +91,15 @@ Scheduler tsLogData;
 
 Task hrMonitoring(2.5 * TASK_SECOND, TASK_FOREVER, &hrCallback, &tsMonitoring, true);
 Task acceMonitoring(TASK_IMMEDIATE, TASK_FOREVER, &acceCallback, &tsMonitoring, true);
-Task pressMonitoring(TASK_IMMEDIATE, TASK_FOREVER, &on_clench, &tsMonitoring, true);
-
+Task pressMonitoring(TASK_IMMEDIATE, TASK_FOREVER, &pressCallback, &tsMonitoring, true);
+Task RTCClock(TASK_IMMEDIATE, TASK_FOREVER, &rtcClock, &tsMonitoring, true);
 Task bleLog(2.5 * TASK_SECOND, TASK_FOREVER, &bleCallback, &tsLogData, true);
 
 void setup() {
   // put your setup code here, to run once:
-
   Serial.begin(115200);
   Wire.begin();
-  delay(500);
-
+  delay(1000);
   initializeAllSensor(); //Activate all sensor
 }
 
@@ -112,69 +113,100 @@ void initializeAllSensor() {
   Serial.println("Initializing all Sensors....");
 
   //Initialize Bluetooth
-  if (bt.begin(btSerial, 115200) == false) {
+  if (bt.begin(Serial3, 115200) == false) {
     Serial.println(F("Failed to connect to Bluetooth"));
     while (1) ;
   } else
-    Serial.println("Bluetooth Initialized!");
+    Serial.println("Bluetooth Initialized");
 
   //Initialize Clock
   clock.begin();
   clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  Serial.println("Clock Initialized!");
+  Serial.println("Clock Initialized");
 
   //Initialize HeartRate Sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
+  pulseSensor.blinkOnPulse(LED13);       //auto-magically blink Arduino's LED with heartbeat.
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
   if (pulseSensor.begin()) {
-    Serial.println("HR Sensor Initialized!");  //This prints one time at Arduino power-up,  or on Arduino reset.
+    Serial.println("HR Sensor Initialized");  //This prints one time at Arduino power-up,  or on Arduino reset.
   }
 
   //Initialize Pressure Sensor
   pressureSense.begin();
-  Serial.println("Pressure Sensor Initialized!");
+  Serial.println("Pressure Sensor Initialized");
 
   //Initialize Accelerometer as StepCounter
   bma456.initialize(RANGE_4G, ODR_1600_HZ, NORMAL_AVG4, CONTINUOUS);
   bma456.stepCounterEnable();
-  Serial.println("Accelerometer/Step counter Initialized!");
+  Serial.println("Accelerometer/Step counter Initialized");
 
   //Initialize Vibration Motor
   pinMode(VIBRATOR_PIN, OUTPUT);
-  Serial.println("Vibration motor Initialized!");
+  Serial.println("Vibration motor Initialized");
 
   Serial.println("Initialization Complete");
   Serial.println("Start monitoring State");
 
-  delay(100);
+  delay(500);
 }
 
-void hrCallback() {
+void rtcClock() {
+  //RTC Clock format
+  DateTime now = clock.now();
+  sprintf(buf1, "%02d:%02d:%02d %02d/%02d/%02d",  now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+}
+
+int hrCallback() {
+   pulseSensor.resume();
   //Getting HR Value on every 10 seconds
-  pulseSensor.resume();
-  int bpm = pulseSensor.getBeatsPerMinute();
+  
+
   if (pulseSensor.sawStartOfBeat()) {
-    btSerial.print("BPM: ");
-    btSerial.print(bpm);
-    btSerial.print("\n");
+    int bpm = pulseSensor.getBeatsPerMinute();
     hrMonitoring.delay(200);
     pulseSensor.pause();
+    return bpm;
   }
-//  pulseSensor.pause();
 }
 
 void acceCallback() {
-
+  step = bma456.getStepCounterOutput();
 }
 
 void bleCallback() {
+  //RTC Clock format
+  int currBPM = hrCallback();
+  DateTime now = clock.now();
+  sprintf(buf1, "%02d:%02d:%02d %02d/%02d/%02d",  now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+  Serial3.print(F("T: "));
+  Serial3.print(buf1);
+  Serial3.print("\n");
+  Serial3.print("HR: ");
+  Serial3.print(currBPM);
+  Serial3.print("\n");
+  Serial3.print("Step: ");
+  Serial3.print(step);
+  Serial3.println();
+  Serial3.println();
+  Serial3.println();
+  currBPM = NULL;
 }
 
 void vibCallback() {
+
 }
 
+void pressCallback(){
+  pressureSense.run();
+ }
+
 void on_clench(uint16_t pressure) {
+//    Serial.print("CLENCH EVENT: ");
+//    Serial.println(pressure);
 }
 
 void on_release(uint16_t pressure) {
+//    Serial.print("CLENCH RELEASE EVENT: ");
+//    Serial.println(pressure);
 }
