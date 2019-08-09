@@ -20,8 +20,7 @@
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include <TaskScheduler.h> // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
 #include "arduino_bma456.h"  //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
-#include <AceButton.h>
-//#include <SD.h>
+#include <SD.h>
 #include <Wire.h>
 #include <RTClib.h>
 #include "Fsm.h"
@@ -43,28 +42,15 @@
 #define _PL(a)
 #endif
 
-using namespace ace_button;
-
 // PIN definitions
 const int CHIPSELECT_PIN  = 4;
-const int BUTTONGREEN_PIN = 30;
-//const int BUTTONBLACK_PIN = 3;
-const int BUTTONWHITE_PIN = 32;
-const int BUTTONBLUE_PIN  = 34;
-const int BUTTONRED_PIN  = 36;
 const int VIBRATOR_PIN = 6;
-const int HEARTRATE_PIN = A3;
+const int HEARTRATE_PIN = 0;
 const int PRESSURE_OUTPUT = 8;
-const int PRESSURE_INPUT  = A0;
-
-// Buttons
-void handleButtonEvent(AceButton*, uint8_t, uint8_t);
-AceButton button_green(BUTTONGREEN_PIN);  // MOCK SIGNAL: CHALLENGE_DETECTED
-AceButton button_white(BUTTONWHITE_PIN);  // This button is actually in the design: CHALLENGE_BUTTON_ACTIVATED
-AceButton button_blue(BUTTONBLUE_PIN);    // MOCK SIGNAL: INACTIVITY_DETECTED
-AceButton button_red(BUTTONRED_PIN);      // MOCK SIGNAL: STRESS_DETECTED
+const int PRESSURE_INPUT  = A2;
 
 void initBLE();
+void initSDCard();
 void initClk();
 void initHR();
 void initAcce();
@@ -180,6 +166,15 @@ void initBLE() {
     Serial.println(F("Bluetooth Initialized!"));
 }
 
+void initSDCard() {
+  if (!SD.begin(CHIPSELECT_PIN)) {
+    Serial.println(F("ERROR: NO SDCARD DETECTED!"));
+    while (1) ;
+  } else {
+    Serial.println(F("SD Card Initialized"));
+  }
+}
+
 void initClk() {
   //  //Initialize Clock
   clock.begin();
@@ -280,34 +275,15 @@ void setup() {
   Serial.println(F("Arduino started"));
 
   initBLE();
+//  initSDCard();
+  initClk();
   initHR();
   initPressureSens();
-  initClk();
   initAcce();
   initFSM();
   intVib ();
 
-  //  pinMode(CHIPSELECT_PIN, OUTPUT);
-  pinMode(BUTTONGREEN_PIN, INPUT);
-  pinMode(BUTTONWHITE_PIN, INPUT);
-  pinMode(BUTTONBLUE_PIN, INPUT);
-  pinMode(BUTTONRED_PIN, INPUT);
-
-  //  if (!SD.begin(CHIPSELECT_PIN)) {
-  //    Serial.println("ERROR: NO SDCARD DETECTED!");
-  //  } else {
-  //  }
-
-  // MOCK signals (should be coming over BlueTooth,
-  // being faked by buttons at this moment)
-  button_green.init(BUTTONGREEN_PIN, LOW, 0);
-  button_green.setEventHandler(handleButtonEvent);
-  button_white.init(BUTTONWHITE_PIN, LOW, 0);
-  button_white.setEventHandler(handleButtonEvent);
-  button_blue.init(BUTTONBLUE_PIN, LOW, 0);
-  button_blue.setEventHandler(handleButtonEvent);
-  button_red.init(BUTTONRED_PIN, LOW, 0);
-  button_red.setEventHandler(handleButtonEvent);
+  Serial.println(F("Start Monitoring"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -321,9 +297,6 @@ void loop() {
   tsLogData.execute();
   tsFSM.execute();
   // All objects invoke callbacks so the whole program is event-driven
-
-
-
 }
 
 void fbleCommCallback() {
@@ -364,11 +337,6 @@ void fsmCallback() {
   //  telemetryTimer.run();
   fsm_main.run_machine();
   pressureSense.run();
-  button_green.check();
-  button_white.check();
-  button_blue.check();
-  button_red.check();
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -407,30 +375,6 @@ void handleBLECommand(char cmd) {
       break;
     case '4':
       events.push(STRESS_DETECTED);
-      break;
-  }
-}
-
-void handleButtonEvent(AceButton* bt, uint8_t eventType,
-                       uint8_t /* buttonState */) {
-  switch (eventType) {
-    case AceButton::kEventPressed:
-      switch (bt->getPin()) {
-        case BUTTONGREEN_PIN:
-          events.push(CHALLENGE_DETECTED);
-          break;
-        case BUTTONWHITE_PIN:
-          events.push(CHALLENGE_BUTTON_ACTIVATED);
-          break;
-        case BUTTONBLUE_PIN:
-          events.push(INACTIVITY_DETECTED);
-          break;
-        case BUTTONRED_PIN:
-          events.push(STRESS_DETECTED);
-          break;
-      }
-      break;
-    case AceButton::kEventReleased:
       break;
   }
 }
