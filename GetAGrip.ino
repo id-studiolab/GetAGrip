@@ -18,7 +18,6 @@
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
-#include <SoftwareSerial.h> //We are going to use software serial to communicate over Bluetooth through UART protocol
 #include <TaskScheduler.h> // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
 #include "arduino_bma456.h"  //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <AceButton.h>
@@ -30,6 +29,7 @@
 #include "PressureSensor.h"
 #include "Vibration.h"
 
+#define SerialPort Serial3 // Abstract serial monitor debug port
 
 // Debug and Test options
 #define _DEBUG_
@@ -47,22 +47,22 @@ using namespace ace_button;
 
 // PIN definitions
 const int CHIPSELECT_PIN  = 4;
-//const int BUTTONGREEN_PIN = 2;
+const int BUTTONGREEN_PIN = 30;
 //const int BUTTONBLACK_PIN = 3;
-//const int BUTTONWHITE_PIN = 6;
-//const int BUTTONBLUE_PIN  = 7;
-//const int BUTTONRED_PIN  = A2;
-const int VIBRATOR_PIN = 5;
+const int BUTTONWHITE_PIN = 32;
+const int BUTTONBLUE_PIN  = 34;
+const int BUTTONRED_PIN  = 36;
+const int VIBRATOR_PIN = 6;
 const int HEARTRATE_PIN = A3;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT  = A0;
 
 // Buttons
-//void handleButtonEvent(AceButton*, uint8_t, uint8_t);
-//AceButton button_green(BUTTONGREEN_PIN);  // MOCK SIGNAL: CHALLENGE_DETECTED
-//AceButton button_white(BUTTONWHITE_PIN);  // This button is actually in the design: CHALLENGE_BUTTON_ACTIVATED
-//AceButton button_blue(BUTTONBLUE_PIN);    // MOCK SIGNAL: INACTIVITY_DETECTED
-//AceButton button_red(BUTTONRED_PIN);      // MOCK SIGNAL: STRESS_DETECTED
+void handleButtonEvent(AceButton*, uint8_t, uint8_t);
+AceButton button_green(BUTTONGREEN_PIN);  // MOCK SIGNAL: CHALLENGE_DETECTED
+AceButton button_white(BUTTONWHITE_PIN);  // This button is actually in the design: CHALLENGE_BUTTON_ACTIVATED
+AceButton button_blue(BUTTONBLUE_PIN);    // MOCK SIGNAL: INACTIVITY_DETECTED
+AceButton button_red(BUTTONRED_PIN);      // MOCK SIGNAL: STRESS_DETECTED
 
 void initBLE();
 void initClk();
@@ -173,7 +173,7 @@ EventQueue events;
 
 //Initialization functions of all components
 void initBLE() {
-  if (bt.begin(Serial3, 115200) == false) {
+  if (bt.begin(SerialPort, 115200) == false) {
     Serial.println(F("Failed to connect to Bluetooth"));
     while (1) ;
   } else
@@ -268,7 +268,6 @@ void initFSM() {
                           NULL);
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // SETUP FUNCTION, All initialisations happen here                            //
@@ -286,14 +285,13 @@ void setup() {
   initClk();
   initAcce();
   initFSM();
+  intVib ();
 
   //  pinMode(CHIPSELECT_PIN, OUTPUT);
-  //  pinMode(BUTTONGREEN_PIN, INPUT);
-  //  pinMode(BUTTONWHITE_PIN, INPUT);
-  //  pinMode(BUTTONBLUE_PIN, INPUT);
-  //  pinMode(BUTTONRED_PIN, INPUT);
-
-  //
+  pinMode(BUTTONGREEN_PIN, INPUT);
+  pinMode(BUTTONWHITE_PIN, INPUT);
+  pinMode(BUTTONBLUE_PIN, INPUT);
+  pinMode(BUTTONRED_PIN, INPUT);
 
   //  if (!SD.begin(CHIPSELECT_PIN)) {
   //    Serial.println("ERROR: NO SDCARD DETECTED!");
@@ -302,14 +300,14 @@ void setup() {
 
   // MOCK signals (should be coming over BlueTooth,
   // being faked by buttons at this moment)
-  //  button_green.init(BUTTONGREEN_PIN, LOW, 0);
-  //  button_green.setEventHandler(handleButtonEvent);
-  //  button_white.init(BUTTONWHITE_PIN, LOW, 0);
-  //  button_white.setEventHandler(handleButtonEvent);
-  //  button_blue.init(BUTTONBLUE_PIN, LOW, 0);
-  //  button_blue.setEventHandler(handleButtonEvent);
-  //  button_red.init(BUTTONRED_PIN, LOW, 0);
-  //  button_red.setEventHandler(handleButtonEvent);
+  button_green.init(BUTTONGREEN_PIN, LOW, 0);
+  button_green.setEventHandler(handleButtonEvent);
+  button_white.init(BUTTONWHITE_PIN, LOW, 0);
+  button_white.setEventHandler(handleButtonEvent);
+  button_blue.init(BUTTONBLUE_PIN, LOW, 0);
+  button_blue.setEventHandler(handleButtonEvent);
+  button_red.init(BUTTONRED_PIN, LOW, 0);
+  button_red.setEventHandler(handleButtonEvent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -324,18 +322,15 @@ void loop() {
   tsFSM.execute();
   // All objects invoke callbacks so the whole program is event-driven
 
-  //  telemetryTimer.run();
 
-  //  button_green.check();
-  //  button_white.check();
-  //  button_blue.check();
-  //  button_red.check();
+
 }
 
 void fbleCommCallback() {
   // If data is available from bt module,
   // print it to serial port
   if (bt.available()) {
+    handleBLECommand((char) bt.read());
     Serial.write((char) bt.read());
   }
   // If data is available from serial port,
@@ -352,22 +347,28 @@ void bleCallback() {
   int bpm = pulseSensor.getBeatsPerMinute();  // Calls function on our pulseSensor object that returns BPM as an "int".
   step = bma456.getStepCounterOutput();
 
-  Serial3.print(F("T: "));
-  Serial3.print(buf1);
-  Serial3.print("\n");
-  Serial3.print(F("HR: "));
-  Serial3.print(bpm);
-  Serial3.print("\n");
-  Serial3.print(F("Step: "));
-  Serial3.print(step);
-  Serial3.println();
-  Serial3.println();
-  Serial3.println();
+  SerialPort.print(F("T: "));
+  SerialPort.print(buf1);
+  SerialPort.print("\n");
+  SerialPort.print(F("HR: "));
+  SerialPort.print(bpm);
+  SerialPort.print("\n");
+  SerialPort.print(F("Step: "));
+  SerialPort.print(step);
+  SerialPort.println();
+  SerialPort.println();
+  SerialPort.println();
 }
 
 void fsmCallback() {
+  //  telemetryTimer.run();
   fsm_main.run_machine();
   pressureSense.run();
+  button_green.check();
+  button_white.check();
+  button_blue.check();
+  button_red.check();
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -392,29 +393,47 @@ void on_release(uint16_t pressure)
   events.push(CLENCH_DEACTIVATED);
 }
 
-//void handleButtonEvent(AceButton* bt, uint8_t eventType,
-//                       uint8_t /* buttonState */) {
-//  switch (eventType) {
-//    case AceButton::kEventPressed:
-//      switch (bt->getPin()) {
-//        case BUTTONGREEN_PIN:
-//          events.push(CHALLENGE_DETECTED);
-//          break;
-//        case BUTTONWHITE_PIN:
-//          events.push(CHALLENGE_BUTTON_ACTIVATED);
-//          break;
-//        case BUTTONBLUE_PIN:
-//          events.push(INACTIVITY_DETECTED);
-//          break;
-//        case BUTTONRED_PIN:
-//          events.push(STRESS_DETECTED);
-//          break;
-//      }
-//      break;
-//    case AceButton::kEventReleased:
-//      break;
-//  }
-//}
+void handleBLECommand(char cmd) {
+  char numb = cmd;
+  switch (numb) {
+    case '1':
+      events.push(CHALLENGE_DETECTED);
+      break;
+    case '2':
+      events.push(CHALLENGE_BUTTON_ACTIVATED);
+      break;
+    case '3':
+      events.push(INACTIVITY_DETECTED);
+      break;
+    case '4':
+      events.push(STRESS_DETECTED);
+      break;
+  }
+}
+
+void handleButtonEvent(AceButton* bt, uint8_t eventType,
+                       uint8_t /* buttonState */) {
+  switch (eventType) {
+    case AceButton::kEventPressed:
+      switch (bt->getPin()) {
+        case BUTTONGREEN_PIN:
+          events.push(CHALLENGE_DETECTED);
+          break;
+        case BUTTONWHITE_PIN:
+          events.push(CHALLENGE_BUTTON_ACTIVATED);
+          break;
+        case BUTTONBLUE_PIN:
+          events.push(INACTIVITY_DETECTED);
+          break;
+        case BUTTONRED_PIN:
+          events.push(STRESS_DETECTED);
+          break;
+      }
+      break;
+    case AceButton::kEventReleased:
+      break;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -424,6 +443,7 @@ void on_release(uint16_t pressure)
 ////////////////////////////////////////////////////////////////////////////////
 void on_standby() {
   check_triggers();
+  //  Serial.println(F("On Standby"));
 }
 
 void on_standby_enter() {
@@ -433,7 +453,7 @@ void on_standby_enter() {
 unsigned long challenge_vib_rep_count = 0;
 void on_challenge() {
   vibChallenge.go();
-
+  Serial.println(F("Vib Chall go"));
   if (vibChallenge.finished()) {
     // Vibration cycle is done, keep track of repetitions
     // and stop after x repetitions.
@@ -463,6 +483,7 @@ void on_challenge_exit() {
 
 void on_selfreport() {
   check_triggers();
+  //  Serial.println(F("On Selfreport"));
 }
 
 void on_selfreport_enter() {
