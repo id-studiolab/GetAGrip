@@ -3,22 +3,22 @@
 // niravmalsatter@gmail.com
 
 // #define _TASK_TIMECRITICAL      // Enable monitoring scheduling overruns
-#define _TASK_SLEEP_ON_IDLE_RUN // Enable 1 ms SLEEP_IDLE powerdowns between tasks if no callback methods were invoked during the pass
+#define _TASK_SLEEP_ON_IDLE_RUN   // Enable 1 ms SLEEP_IDLE powerdowns between tasks if no callback methods were invoked during the pass
 // #define _TASK_STATUS_REQUEST    // Compile with support for StatusRequest functionality - triggering tasks on status change events in addition to time only
 // #define _TASK_WDT_IDS           // Compile with support for wdt control points and task ids
 // #define _TASK_LTS_POINTER       // Compile with support for local task storage pointer
-#define _TASK_PRIORITY          // Support for layered scheduling priority
+#define _TASK_PRIORITY            // Support for layered scheduling priority
 // #define _TASK_MICRO_RES         // Support for microsecond resolution
 // #define _TASK_STD_FUNCTION      // Support for std::function (ESP8266 and ESP32 ONLY)
-#define _TASK_DEBUG             // Make all methods and variables public for debug purposes
+#define _TASK_DEBUG               // Make all methods and variables public for debug purposes
 // #define _TASK_INLINE            // Make all methods "inline" - needed to support some multi-tab, multi-file implementations
-#define _TASK_TIMEOUT           // Support for overall task timeout
+#define _TASK_TIMEOUT             // Support for overall task timeout
 // #define _TASK_OO_CALLBACKS      // Support for dynamic callback method binding
 
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
-#include <TaskScheduler.h> // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
+#include <TaskScheduler.h>    // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
 #include "arduino_bma456.h"  //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <SD.h>
 #include <Wire.h>
@@ -43,7 +43,7 @@
 #endif
 
 // PIN definitions
-const int CHIPSELECT_PIN  = 4;
+const int CHIPSELECT_PIN  = 10;
 const int VIBRATOR_PIN = 6;
 const int HEARTRATE_PIN = 0;
 const int PRESSURE_OUTPUT = 8;
@@ -73,6 +73,7 @@ void check_triggers();
 void fbleCommCallback();
 void bleCallback();
 void fsmCallback();
+void logToSDcard();
 
 uint16_t vib_zero(uint16_t, uint16_t);
 uint16_t vib_half(uint16_t, uint16_t);
@@ -98,6 +99,7 @@ HM1X_BT bt;
 // Realtime Clock
 RTC_DS1307 clock; //define a object of DS1307 class
 char buf1[10]; //array buffer to store time data in char
+char fname[50]; //array buffer to store filename in char
 
 // Heartrate
 const int PROGMEM HEARTRATE_THRESHOLD = 550;
@@ -115,8 +117,8 @@ VibrationElement rampUp       (100, 30,  1,  &vib_rampup);   //  goes from zero 
 VibrationElement sawtoothUp   (100, 2,   5,  &vib_rampup);   //  rampup many times
 VibrationElement rampDown     (100, 10,  1,  &vib_rampdown); //  goes from MAX to zero (scaled over time)
 VibrationElement sawtoothDown (100, 2,   5,  &vib_rampdown); //  rampdown many times
-//  example of a combined ramp-up and ramp-down in one function.
-//   It's easier to seperate this behaviour in multiple functions for clarity
+//  Example of a combined ramp-up and ramp-down in one function.
+//  It's easier to seperate this behaviour in multiple functions for clarity
 VibrationElement piramid      (100, 5,  10,  &vib_piramid);
 
 Vibration vibStressAlarm(VIBRATOR_PIN);     // These vibration patterns are assembled in setup();
@@ -275,7 +277,7 @@ void setup() {
   Serial.println(F("Arduino started"));
 
   initBLE();
-//  initSDCard();
+  initSDCard();
   initClk();
   initHR();
   initPressureSens();
@@ -331,6 +333,10 @@ void bleCallback() {
   SerialPort.println();
   SerialPort.println();
   SerialPort.println();
+
+  bleLog.setCallback(logToSDcard);
+  Serial.println ("SD Card Task Disbaled");
+
 }
 
 void fsmCallback() {
@@ -558,48 +564,44 @@ uint16_t vib_piramid(uint16_t x, uint16_t max_x)
   }
 }
 
-//void logToSDcard()
-//{
-//  // Compile filename for SD card logging (YYYY-MM-DD_HH)
-//  clock.getTime();
-//  String filename = String(clock.year);
-//
-//  filename += ZeroPad(clock.month);
-//  filename += ZeroPad(clock.dayOfMonth);
-//  filename += ZeroPad(clock.hour);
-//  filename += F(".csv");
-//
-//  // open the file. note that only one file can be open at a time,
-//  // so you have to close this one before opening another.
-//  File dataFile = SD.open(filename.c_str(), FILE_WRITE);
-//
-//  if (dataFile) {
-//    // Timestamp
-//    dataFile.print(clock.year + 2000, DEC);
-//    dataFile.print('-');
-//    dataFile.print(ZeroPad(clock.month));
-//    dataFile.print('-');
-//    dataFile.print(ZeroPad(clock.dayOfMonth));
-//    dataFile.print(',');
-//    dataFile.print(ZeroPad(clock.hour));
-//    dataFile.print(':');
-//    dataFile.print(ZeroPad(clock.minute));
-//    dataFile.print(':');
-//    dataFile.print(ZeroPad(clock.second));
-//
-//    // Datafields
-//    dataFile.print(',');
-//    dataFile.print(12, DEC); // data
-//
-//    // Newline at end of file
-//    dataFile.println();
-//  }
-//  else
-//  {
-//  }
-//
-//  dataFile.close();
-//}
+void logToSDcard()
+{ 
+
+  // Compile filename for SD card logging (YYYY-MM-DD)
+  DateTime now = clock.now();
+  sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
+
+  int bpm = pulseSensor.getBeatsPerMinute();  // Calls function on our pulseSensor object that returns BPM as an "int".
+
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  File dataFile = SD.open(fname, FILE_WRITE);
+ 
+    if (dataFile) {
+      // Timestamp
+      dataFile.print(F("T: "));
+      dataFile.print(buf1);
+      dataFile.println();
+      // Datafields (HR and Steps)
+      dataFile.print(F("HR: "));
+      dataFile.print(bpm);
+      dataFile.println();
+      dataFile.print(F("Step: "));
+      dataFile.print(step);
+  
+      // Newline at end of file
+      dataFile.println();
+      dataFile.close();
+    }
+    else
+    {
+      Serial.println ("Error in opening the file!!");
+      while(1);
+    }
+  
+  Serial.println ("Data Logged to SD Card and Task Disbaled");
+  bleLog.setCallback(bleCallback);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 //                                                                           //
