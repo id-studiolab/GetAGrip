@@ -360,13 +360,13 @@ uint32_t currSteps (){
 
 void bleCallback()
 { 
-  SerialPort.print(F("T:"));
+  SerialPort.print(F("t"));
   SerialPort.print(currTimestamp());
   SerialPort.print(semicolon);
-  SerialPort.print(F("HR:"));
+  SerialPort.print(F("h"));
   SerialPort.print(currHR());
   SerialPort.print(semicolon);
-  SerialPort.print(F("Step:"));
+  SerialPort.print(F("s"));
   SerialPort.print(currSteps());
   SerialPort.println();
 
@@ -645,14 +645,14 @@ void logToSDcard()
   if (dataFile)
   {
     // Timestamp
-    dataFile.print(F("T"));
+    dataFile.print(F("t"));
     dataFile.print(currTimestamp());
     dataFile.print(semicolon);
     // Datafields (HR and Steps)
-    dataFile.print(F("HR"));
+    dataFile.print(F("h"));
     dataFile.print(currHR());
     dataFile.print(semicolon);
-    dataFile.print(F("Step"));
+    dataFile.print(F("s"));
     dataFile.print(currSteps());
     // Newline at end of file
     dataFile.println();
