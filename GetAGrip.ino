@@ -1,25 +1,25 @@
-// By Richard Bekking & Nirav Malsattar
-// richard@electronicsdesign.nl
+// By Nirav Malsattar
 // niravmalsatter@gmail.com
 
 // #define _TASK_TIMECRITICAL      // Enable monitoring scheduling overruns
-#define _TASK_SLEEP_ON_IDLE_RUN   // Enable 1 ms SLEEP_IDLE powerdowns between tasks if no callback methods were invoked during the pass
+#define _TASK_SLEEP_ON_IDLE_RUN // Enable 1 ms SLEEP_IDLE powerdowns between tasks if no callback methods were invoked during the pass
 // #define _TASK_STATUS_REQUEST    // Compile with support for StatusRequest functionality - triggering tasks on status change events in addition to time only
 // #define _TASK_WDT_IDS           // Compile with support for wdt control points and task ids
 // #define _TASK_LTS_POINTER       // Compile with support for local task storage pointer
-#define _TASK_PRIORITY            // Support for layered scheduling priority
+#define _TASK_PRIORITY // Support for layered scheduling priority
 // #define _TASK_MICRO_RES         // Support for microsecond resolution
 // #define _TASK_STD_FUNCTION      // Support for std::function (ESP8266 and ESP32 ONLY)
-#define _TASK_DEBUG               // Make all methods and variables public for debug purposes
+#define _TASK_DEBUG // Make all methods and variables public for debug purposes
 // #define _TASK_INLINE            // Make all methods "inline" - needed to support some multi-tab, multi-file implementations
-#define _TASK_TIMEOUT             // Support for overall task timeout
+#define _TASK_TIMEOUT // Support for overall task timeout
 // #define _TASK_OO_CALLBACKS      // Support for dynamic callback method binding
 
+#define semicolon ';'   // Semicolon ';'
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
-#include <TaskScheduler.h>    // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
-#include "arduino_bma456.h"  //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
+#include <TaskScheduler.h>                           // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
+#include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <SD.h>
 #include <Wire.h>
 #include <RTClib.h>
@@ -43,18 +43,18 @@
 #endif
 
 // PIN definitions
-const int CHIPSELECT_PIN  = 10;
+const int CHIPSELECT_PIN = 10;
 const int VIBRATOR_PIN = 6;
 const int HEARTRATE_PIN = 0;
 const int PRESSURE_OUTPUT = 8;
-const int PRESSURE_INPUT  = A2;
+const int PRESSURE_INPUT = A2;
 
 void initBLE();
 void initSDCard();
 void initClk();
 void initHR();
 void initAcce();
-void intVib ();
+void intVib();
 void initPressureSens();
 void initFSM();
 
@@ -63,6 +63,7 @@ void on_standby_enter();
 void on_challenge_enter();
 void on_selfreport();
 void on_selfreport_enter();
+void on_selfreport_exit();
 void on_stressalarm_enter();
 void on_stressalarm_exit();
 void on_challengealarm_enter();
@@ -70,10 +71,10 @@ void on_challengealarm_exit();
 void on_inactivityalarm_enter();
 void on_inactivityalarm_exit();
 void check_triggers();
-void fbleCommCallback();
 void bleCallback();
 void fsmCallback();
 void logToSDcard();
+void bleCmdCallback();
 
 uint16_t vib_zero(uint16_t, uint16_t);
 uint16_t vib_half(uint16_t, uint16_t);
@@ -89,7 +90,7 @@ const int PROGMEM INACTIVITY_DETECTED = 3;
 const int PROGMEM CHALLENGE_DETECTED = 4;
 const int PROGMEM CLENCH_ACTIVATED = 5;
 const int PROGMEM CLENCH_DEACTIVATED = 6;
-const int PROGMEM STRESSALARM_TIMEOUT   = 7;
+const int PROGMEM STRESSALARM_TIMEOUT = 7;
 const int PROGMEM CHALLENGEALARM_TIMEOUT = 8;
 const int PROGMEM INACTIVITYALARM_TIMEOUT = 9;
 
@@ -98,8 +99,8 @@ HM1X_BT bt;
 
 // Realtime Clock
 RTC_DS1307 clock; //define a object of DS1307 class
-char buf1[10]; //array buffer to store time data in char
-char fname[50]; //array buffer to store filename in char
+uint32_t buf1;    //array buffer to store time data in char
+char fname[50];   //array buffer to store filename in char
 
 // Heartrate
 const int PROGMEM HEARTRATE_THRESHOLD = 550;
@@ -110,18 +111,18 @@ uint32_t step = 0;
 
 // Vibration
 const int PROGMEM CHALLENGE_VIB_REPETITIONS = 1000;
-VibrationElement constZero    (1,   500, 1,  &vib_zero);     //  _______ <- 0%
-VibrationElement constHalf    (1,   1500, 1, &vib_half);     //  ------- <- 50%
-VibrationElement constFull    (1,   1500, 1, &vib_full);     //  ------- <- 100%
-VibrationElement rampUp       (100, 30,  1,  &vib_rampup);   //  goes from zero to MAX (scaled over time)
-VibrationElement sawtoothUp   (100, 2,   5,  &vib_rampup);   //  rampup many times
-VibrationElement rampDown     (100, 10,  1,  &vib_rampdown); //  goes from MAX to zero (scaled over time)
-VibrationElement sawtoothDown (100, 2,   5,  &vib_rampdown); //  rampdown many times
+VibrationElement constZero(1, 500, 1, &vib_zero);        //  _______ <- 0%
+VibrationElement constHalf(1, 1500, 1, &vib_half);       //  ------- <- 50%
+VibrationElement constFull(1, 1500, 1, &vib_full);       //  ------- <- 100%
+VibrationElement rampUp(100, 30, 1, &vib_rampup);        //  goes from zero to MAX (scaled over time)
+VibrationElement sawtoothUp(100, 2, 5, &vib_rampup);     //  rampup many times
+VibrationElement rampDown(100, 10, 1, &vib_rampdown);    //  goes from MAX to zero (scaled over time)
+VibrationElement sawtoothDown(100, 2, 5, &vib_rampdown); //  rampdown many times
 //  Example of a combined ramp-up and ramp-down in one function.
 //  It's easier to seperate this behaviour in multiple functions for clarity
-VibrationElement piramid      (100, 5,  10,  &vib_piramid);
+VibrationElement piramid(100, 5, 10, &vib_piramid);
 
-Vibration vibStressAlarm(VIBRATOR_PIN);     // These vibration patterns are assembled in setup();
+Vibration vibStressAlarm(VIBRATOR_PIN); // These vibration patterns are assembled in setup();
 Vibration vibChallengeAlarm(VIBRATOR_PIN);
 Vibration vibChallenge(VIBRATOR_PIN);
 Vibration vibInactiveAlarm(VIBRATOR_PIN);
@@ -146,13 +147,13 @@ Scheduler tsFSM;
   TASK_NOTIMEOUT
 */
 
-Task bleCMD(TASK_IMMEDIATE, TASK_FOREVER, &fbleCommCallback, &tsLogData, true);
-Task bleLog(5 * TASK_SECOND, TASK_FOREVER, &bleCallback, &tsLogData, true);
+Task bleCMD(TASK_IMMEDIATE, TASK_FOREVER, &bleCmdCallback, &tsLogData, true);
+Task bleLog(10 * TASK_SECOND, TASK_FOREVER, &bleCallback, &tsLogData, true);
 Task runFSM(TASK_IMMEDIATE, TASK_FOREVER, &fsmCallback, &tsFSM, true);
 
 State state_standby(&on_standby_enter, &on_standby, NULL);
 State state_challenge(&on_challenge_enter, &on_challenge, &on_challenge_exit);
-State state_selfreport(&on_selfreport_enter, &on_selfreport, NULL);
+State state_selfreport(&on_selfreport_enter, &on_selfreport, on_selfreport_exit);
 State state_stressalarm(&on_stressalarm_enter, &on_stressalarm, &on_stressalarm_exit);
 State state_challengealarm(&on_challengealarm_enter, &on_challengealarm, &on_challengealarm_exit);
 State state_inactivityalarm(&on_inactivityalarm_enter, &on_inactivityalarm, &on_inactivityalarm_exit);
@@ -160,53 +161,68 @@ Fsm fsm_main(&state_standby);
 EventQueue events;
 
 //Initialization functions of all components
-void initBLE() {
-  if (bt.begin(SerialPort, 115200) == false) {
+void initBLE()
+{
+  if (bt.begin(SerialPort, 115200) == false)
+  {
     Serial.println(F("Failed to connect to Bluetooth"));
-    while (1) ;
-  } else
+    while (1)
+      ;
+  }
+  else
     Serial.println(F("Bluetooth Initialized!"));
 }
 
-void initSDCard() {
-  if (!SD.begin(CHIPSELECT_PIN)) {
+void initSDCard()
+{
+  if (!SD.begin(CHIPSELECT_PIN))
+  {
     Serial.println(F("ERROR: NO SDCARD DETECTED!"));
-    while (1) ;
-  } else {
+    while (1)
+      ;
+  }
+  else
+  {
     Serial.println(F("SD Card Initialized"));
   }
 }
 
-void initClk() {
+void initClk()
+{
   //  //Initialize Clock
   clock.begin();
   clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
   Serial.println(F("Clock Initialized!"));
 }
 
-void initHR() {
+void initHR()
+{
   // Heartrate sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
-  if (!pulseSensor.begin()) {
+  if (!pulseSensor.begin())
+  {
     Serial.println(F("Heartrate sensor failed!"));
     delay(20);
   }
 }
-void initPressureSens() {
+void initPressureSens()
+{
   // Pressure sensor
   // To calibrate the pressure sensor, whear the glove, relax your hand
   // and reset or power-cycle the glove.
   pressureSense.begin();
 }
-void initAcce() {
+void initAcce()
+{
   //Initialize Accelerometer as StepCounter
   bma456.initialize(RANGE_4G, ODR_1600_HZ, NORMAL_AVG4, CONTINUOUS);
   bma456.stepCounterEnable();
   Serial.println(F("Accelerometer/Step counter Initialized!"));
 }
-void intVib () {
 
+void intVib()
+{
   pinMode(VIBRATOR_PIN, OUTPUT);
   digitalWrite(VIBRATOR_PIN, LOW);
 
@@ -223,7 +239,8 @@ void intVib () {
   vibChallenge.append(constZero);
 }
 
-void initFSM() {
+void initFSM()
+{
   // Finite State Machine transition table construction
   // It's possible to make fully timed transitions. Check the documentation at Jon Black's website:
   // https://jonblack.me/arduino-multitasking-using-finite-state-machines/
@@ -270,11 +287,13 @@ void initFSM() {
 // SETUP FUNCTION, All initialisations happen here                            //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   while (!Serial);
   Wire.begin();
   Serial.println(F("Arduino started"));
+  Serial.println(F("Start Initialize Sensors"));
 
   initBLE();
   initSDCard();
@@ -283,9 +302,9 @@ void setup() {
   initPressureSens();
   initAcce();
   initFSM();
-  intVib ();
-
-  Serial.println(F("Start Monitoring"));
+  intVib();
+  Serial.println(F("Sensors Initialize Successfully Finished"));
+  Serial.println(F("Start StateMachine"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -295,51 +314,68 @@ void setup() {
 // handlers. e.g. on_standby(), on_challenge_enter() etc.                     //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void loop() {
-  tsLogData.execute();
-  tsFSM.execute();
+void loop()
+{
+   tsLogData.execute();
+   tsFSM.execute();
   // All objects invoke callbacks so the whole program is event-driven
+  //  telemetryTimer.run();
+//  fsm_main.run_machine();
+//  pressureSense.run();
+//  bleCmdCallback();
 }
 
-void fbleCommCallback() {
+void bleCmdCallback()
+{
   // If data is available from bt module,
   // print it to serial port
-  if (bt.available()) {
-    handleBLECommand((char) bt.read());
-    Serial.write((char) bt.read());
+  if (bt.available())
+  {
+    handleBLECommand((char)bt.read());
+    Serial.print((char)bt.read());
   }
   // If data is available from serial port,
   // print it to bt module.
-  if (Serial.available()) {
-    bt.write((char) Serial.read());
+  if (Serial.available())
+  {
+    bt.write((char)Serial.read());
   }
 }
 
-void bleCallback() {
+uint32_t currTimestamp(){
   DateTime now = clock.now();
-  sprintf(buf1, "%02d:%02d:%02d %02d/%02d/%02d",  now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+  buf1 = now.unixtime();
+  return buf1;
+  }
 
-  int bpm = pulseSensor.getBeatsPerMinute();  // Calls function on our pulseSensor object that returns BPM as an "int".
+int currHR (){
+  int bpm = pulseSensor.getBeatsPerMinute();
+  return bpm;
+  }
+
+uint32_t currSteps (){
   step = bma456.getStepCounterOutput();
+  return step;
+ }
 
-  SerialPort.print(F("T: "));
-  SerialPort.print(buf1);
-  SerialPort.print("\n");
-  SerialPort.print(F("HR: "));
-  SerialPort.print(bpm);
-  SerialPort.print("\n");
-  SerialPort.print(F("Step: "));
-  SerialPort.print(step);
-  SerialPort.println();
-  SerialPort.println();
+void bleCallback()
+{ 
+  SerialPort.print(F("T:"));
+  SerialPort.print(currTimestamp());
+  SerialPort.print(semicolon);
+  SerialPort.print(F("HR:"));
+  SerialPort.print(currHR());
+  SerialPort.print(semicolon);
+  SerialPort.print(F("Step:"));
+  SerialPort.print(currSteps());
   SerialPort.println();
 
-  bleLog.setCallback(logToSDcard);
-  Serial.println ("SD Card Task Disbaled");
-
+  Serial.println("Data sent over BLE");
+  logToSDcard();
 }
 
-void fsmCallback() {
+void fsmCallback()
+{
   //  telemetryTimer.run();
   fsm_main.run_machine();
   pressureSense.run();
@@ -355,33 +391,39 @@ void on_clench(uint16_t pressure)
 {
   // This will be invoked when we detect that the user is clenching his fist
   // for a (configurable) while. Check PressureSensor.h to configure this.
-  //  Serial.print("CLENCH EVENT: "); Serial.println(pressure);
-  events.push(CLENCH_ACTIVATED);
+  Serial.print("CLENCH EVENT: ");
+  Serial.println(pressure);
+
+//  events.push(CLENCH_ACTIVATED);  //******This Needs to be activated once the golves design is ready******
 }
 
 void on_release(uint16_t pressure)
 {
   // This will be invoked when we detect that the user is releasing his clenched
   // fist.
-  //  Serial.print(F("CLENCH RELEASE EVENT: ")); Serial.println(pressure);
-  events.push(CLENCH_DEACTIVATED);
+  Serial.print(F("CLENCH RELEASE EVENT: "));
+  Serial.println(pressure);
+
+//  events.push(CLENCH_DEACTIVATED);  //******This Needs to be activated once the golves design is ready******
 }
 
-void handleBLECommand(char cmd) {
+void handleBLECommand(char cmd)
+{
   char numb = cmd;
-  switch (numb) {
-    case '1':
-      events.push(CHALLENGE_DETECTED);
-      break;
-    case '2':
-      events.push(CHALLENGE_BUTTON_ACTIVATED);
-      break;
-    case '3':
-      events.push(INACTIVITY_DETECTED);
-      break;
-    case '4':
-      events.push(STRESS_DETECTED);
-      break;
+  switch (numb)
+  {
+  case '1':
+    events.push(CHALLENGE_DETECTED);
+    break;
+  case '2':
+    events.push(CHALLENGE_BUTTON_ACTIVATED);
+    break;
+  case '3':
+    events.push(INACTIVITY_DETECTED);
+    break;
+  case '4':
+    events.push(STRESS_DETECTED);
+    break;
   }
 }
 
@@ -391,26 +433,31 @@ void handleBLECommand(char cmd) {
 // main state-machine which handles the bulk of the buisness.                 //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void on_standby() {
+void on_standby()
+{
   check_triggers();
-  //  Serial.println(F("On Standby"));
+//  Serial.println(F("On Standby"));
 }
 
-void on_standby_enter() {
+void on_standby_enter()
+{
   Serial.println(F("Standby enter"));
 }
 
 unsigned long challenge_vib_rep_count = 0;
-void on_challenge() {
+void on_challenge()
+{
   vibChallenge.go();
   Serial.println(F("Vib Chall go"));
-  if (vibChallenge.finished()) {
+  if (vibChallenge.finished())
+  {
     // Vibration cycle is done, keep track of repetitions
     // and stop after x repetitions.
     vibChallenge.reset();
     ++challenge_vib_rep_count;
 
-    if (challenge_vib_rep_count >= CHALLENGE_VIB_REPETITIONS) {
+    if (challenge_vib_rep_count >= CHALLENGE_VIB_REPETITIONS)
+    {
       challenge_vib_rep_count = 0;
       // If the user forgets to press the button, we do it for them after
       // many repetitions
@@ -421,43 +468,55 @@ void on_challenge() {
   check_triggers();
 }
 
-void on_challenge_enter() {
+void on_challenge_enter()
+{
   Serial.println(F("Challenge enter"));
 }
 
-void on_challenge_exit() {
+void on_challenge_exit()
+{
   vibChallenge.reset();
   challenge_vib_rep_count = 0;
   Serial.println(F("Challenge exit"));
 }
 
-void on_selfreport() {
-  check_triggers();
-  //  Serial.println(F("On Selfreport"));
+void on_selfreport_exit()
+{
+  Serial.println(F("Self Report Succeed!!"));
 }
 
-void on_selfreport_enter() {
+void on_selfreport()
+{ 
+  logToSDcard();
+  bleCallback();
+}
+
+void on_selfreport_enter()
+{
   Serial.println(F("Selfreport enter"));
 }
 
-void on_stressalarm() {
+void on_stressalarm()
+{
   vibStressAlarm.go();
 
-  if (vibStressAlarm.finished()) {
+  if (vibStressAlarm.finished())
+  {
     // Vibration is done
     vibStressAlarm.reset(); // Make sure vibration stops and the whole cycle resets
     Serial.println(F("vibStressAlarm is done!"));
     events.push(STRESSALARM_TIMEOUT);
   }
-
   check_triggers();
 }
 
-void on_stressalarm_enter() {
+void on_stressalarm_enter()
+{
   Serial.println(F("Stressalarm enter"));
 }
 
-void on_stressalarm_exit() {
+void on_stressalarm_exit()
+{
   vibStressAlarm.reset(); // Stop the vibration in case we were interrupted
   Serial.println(F("Stressalarm exit"));
 }
@@ -468,7 +527,8 @@ void on_challengealarm()
 
   vibChallengeAlarm.go();
 
-  if (vibChallengeAlarm.finished()) {
+  if (vibChallengeAlarm.finished())
+  {
     // Vibration cycle is done
     Serial.println(F("Challenge alarm done!"));
     vibChallengeAlarm.reset();
@@ -478,19 +538,23 @@ void on_challengealarm()
   check_triggers();
 }
 
-void on_challengealarm_enter() {
+void on_challengealarm_enter()
+{
   Serial.println(F("Challenge alarm enter"));
 }
 
-void on_challengealarm_exit() {
+void on_challengealarm_exit()
+{
   vibChallengeAlarm.reset(); // Stop the vibration in case we were interrupted
   Serial.println(F("Challenge alarm exit"));
 }
 
-void on_inactivityalarm() {
+void on_inactivityalarm()
+{
   vibInactiveAlarm.go();
 
-  if (vibInactiveAlarm.finished()) {
+  if (vibInactiveAlarm.finished())
+  {
     // Vibration is done
     vibInactiveAlarm.reset();
     Serial.println(F("vibInactiveAlarm done!"));
@@ -500,11 +564,13 @@ void on_inactivityalarm() {
   check_triggers();
 }
 
-void on_inactivityalarm_enter() {
+void on_inactivityalarm_enter()
+{
   Serial.println(F("Inactivity alarm enter"));
 }
 
-void on_inactivityalarm_exit() {
+void on_inactivityalarm_exit()
+{
   Serial.println(F("Inactivity alarm exit"));
 }
 
@@ -512,7 +578,8 @@ void check_triggers()
 {
   // Are there any state-changing events?
   // If yes, execute them.
-  if (events.state() != EMPTY) {
+  if (events.state() != EMPTY)
+  {
     fsm_main.trigger(events.pop());
   }
 }
@@ -559,48 +626,46 @@ uint16_t vib_piramid(uint16_t x, uint16_t max_x)
   {
     return xstep * (x + 1);
   }
-  else {
+  else
+  {
     return VIBRATION_MAX - xstep * (x - (max_x / 2));
   }
 }
 
 void logToSDcard()
 { 
-
-  // Compile filename for SD card logging (YYYY-MM-DD)
+  //creating file name according to current date
   DateTime now = clock.now();
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
-
-  int bpm = pulseSensor.getBeatsPerMinute();  // Calls function on our pulseSensor object that returns BPM as an "int".
-
+  
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
- 
-    if (dataFile) {
-      // Timestamp
-      dataFile.print(F("T: "));
-      dataFile.print(buf1);
-      dataFile.println();
-      // Datafields (HR and Steps)
-      dataFile.print(F("HR: "));
-      dataFile.print(bpm);
-      dataFile.println();
-      dataFile.print(F("Step: "));
-      dataFile.print(step);
-  
-      // Newline at end of file
-      dataFile.println();
-      dataFile.close();
-    }
-    else
-    {
-      Serial.println ("Error in opening the file!!");
-      while(1);
-    }
-  
-  Serial.println ("Data Logged to SD Card and Task Disbaled");
-  bleLog.setCallback(bleCallback);
+
+  if (dataFile)
+  {
+    // Timestamp
+    dataFile.print(F("T"));
+    dataFile.print(currTimestamp());
+    dataFile.print(semicolon);
+    // Datafields (HR and Steps)
+    dataFile.print(F("HR"));
+    dataFile.print(currHR());
+    dataFile.print(semicolon);
+    dataFile.print(F("Step"));
+    dataFile.print(currSteps());
+    // Newline at end of file
+    dataFile.println();
+    dataFile.close();
+  }
+  else
+  {
+    Serial.println("Error in opening the file!!");
+    while (1)
+      ;
+  }
+
+  Serial.println("Data Logged to SD Card");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

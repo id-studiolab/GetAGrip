@@ -1,0 +1,7 @@
+{
+    "board": "arduino:avr:mega",
+    "configuration": "cpu=atmega2560",
+    "port": "/dev/cu.usbserial-AI05F84J",
+    "programmer": "AVRISP mkII",
+    "sketch": "GetAGrip.ino"
+}
