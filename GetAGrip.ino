@@ -14,7 +14,7 @@
 #define _TASK_TIMEOUT // Support for overall task timeout
 // #define _TASK_OO_CALLBACKS      // Support for dynamic callback method binding
 
-#define semicolon ';'   // Semicolon ';'
+#define comma ','   // comma ';'
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
@@ -362,10 +362,10 @@ void bleCallback()
 { 
   SerialPort.print(F("t"));
   SerialPort.print(currTimestamp());
-  SerialPort.print(semicolon);
+  SerialPort.print(comma);
   SerialPort.print(F("h"));
   SerialPort.print(currHR());
-  SerialPort.print(semicolon);
+  SerialPort.print(comma);
   SerialPort.print(F("s"));
   SerialPort.print(currSteps());
   SerialPort.println();
@@ -647,11 +647,11 @@ void logToSDcard()
     // Timestamp
     dataFile.print(F("t"));
     dataFile.print(currTimestamp());
-    dataFile.print(semicolon);
+    dataFile.print(comma);
     // Datafields (HR and Steps)
     dataFile.print(F("h"));
     dataFile.print(currHR());
-    dataFile.print(semicolon);
+    dataFile.print(comma);
     dataFile.print(F("s"));
     dataFile.print(currSteps());
     // Newline at end of file
