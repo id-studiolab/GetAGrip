@@ -40,7 +40,7 @@ void PressureSensor::discharge()
   digitalWrite(outputpin, LOW);
   pinMode(inputpin, OUTPUT);
   digitalWrite(inputpin, LOW);
-  delay(1);
+  delay(100);
   pinMode(inputpin, INPUT);
 }
 

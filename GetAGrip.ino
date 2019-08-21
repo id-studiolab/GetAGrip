@@ -1,24 +1,10 @@
 // By Nirav Malsattar
 // niravmalsatter@gmail.com
 
-// #define _TASK_TIMECRITICAL      // Enable monitoring scheduling overruns
-#define _TASK_SLEEP_ON_IDLE_RUN // Enable 1 ms SLEEP_IDLE powerdowns between tasks if no callback methods were invoked during the pass
-// #define _TASK_STATUS_REQUEST    // Compile with support for StatusRequest functionality - triggering tasks on status change events in addition to time only
-// #define _TASK_WDT_IDS           // Compile with support for wdt control points and task ids
-// #define _TASK_LTS_POINTER       // Compile with support for local task storage pointer
-#define _TASK_PRIORITY // Support for layered scheduling priority
-// #define _TASK_MICRO_RES         // Support for microsecond resolution
-// #define _TASK_STD_FUNCTION      // Support for std::function (ESP8266 and ESP32 ONLY)
-#define _TASK_DEBUG // Make all methods and variables public for debug purposes
-// #define _TASK_INLINE            // Make all methods "inline" - needed to support some multi-tab, multi-file implementations
-#define _TASK_TIMEOUT // Support for overall task timeout
-// #define _TASK_OO_CALLBACKS      // Support for dynamic callback method binding
-
-#define comma ','   // comma ';'
+#define comma ','   // comma ','
 #define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
-#include <TaskScheduler.h>                           // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
 #include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <SD.h>
 #include <Wire.h>
@@ -27,6 +13,7 @@
 #include "EventQueue.h"
 #include "PressureSensor.h"
 #include "Vibration.h"
+#include "MillisTimer.h"
 
 #define SerialPort Serial3 // Abstract serial monitor debug port
 
@@ -49,6 +36,7 @@ const int HEARTRATE_PIN = 0;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT = A2;
 
+void initTimer();
 void initBLE();
 void initSDCard();
 void initClk();
@@ -70,11 +58,15 @@ void on_challengealarm_enter();
 void on_challengealarm_exit();
 void on_inactivityalarm_enter();
 void on_inactivityalarm_exit();
+void on_logdata_enter();
+void on_logdata();
+void on_logdata_exit();
 void check_triggers();
-void bleCallback();
-void fsmCallback();
-void logToSDcard();
-void bleCmdCallback();
+void logDataCallback();
+void contLoopCallback();
+bool logToSDcard();
+bool transToBLE();
+void checkBLECmd();
 
 uint16_t vib_zero(uint16_t, uint16_t);
 uint16_t vib_half(uint16_t, uint16_t);
@@ -93,6 +85,8 @@ const int PROGMEM CLENCH_DEACTIVATED = 6;
 const int PROGMEM STRESSALARM_TIMEOUT = 7;
 const int PROGMEM CHALLENGEALARM_TIMEOUT = 8;
 const int PROGMEM INACTIVITYALARM_TIMEOUT = 9;
+const int PROGMEM LOG_DATA = 10;
+const int PROGMEM LOG_DATA_TIMEOUT = 11;
 
 //Bluetooth
 HM1X_BT bt;
@@ -100,9 +94,11 @@ HM1X_BT bt;
 // Realtime Clock
 RTC_DS1307 clock; //define a object of DS1307 class
 uint32_t buf1;    //array buffer to store time data in char
-char fname[50];   //array buffer to store filename in char
+char fname[10];   //array buffer to store filename in char
 
 // Heartrate
+byte samplesUntilReport;
+const byte SAMPLES_PER_SERIAL_SAMPLE = 10;
 const int PROGMEM HEARTRATE_THRESHOLD = 550;
 PulseSensorPlayground pulseSensor;
 
@@ -133,30 +129,18 @@ void on_clench(uint16_t pressure);
 void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
 
-Scheduler tsLogData;
-Scheduler tsFSM;
-/*
-  Scheduling defines:
-  TASK_MILLISECOND
-  TASK_SECOND
-  TASK_MINUTE
-  TASK_HOUR
-  TASK_IMMEDIATE
-  TASK_FOREVER
-  TASK_ONCE
-  TASK_NOTIMEOUT
-*/
+// Data acquisition
+void telemetryTimer_handler(MillisTimer &mt);
+MillisTimer telemetryTimer = MillisTimer(1000); // Take a snapshot of all the date once every 5 seconds
 
-Task bleCMD(TASK_IMMEDIATE, TASK_FOREVER, &bleCmdCallback, &tsLogData, true);
-Task bleLog(10 * TASK_SECOND, TASK_FOREVER, &bleCallback, &tsLogData, true);
-Task runFSM(TASK_IMMEDIATE, TASK_FOREVER, &fsmCallback, &tsFSM, true);
-
+//Defining States for state machine machine to run
 State state_standby(&on_standby_enter, &on_standby, NULL);
 State state_challenge(&on_challenge_enter, &on_challenge, &on_challenge_exit);
-State state_selfreport(&on_selfreport_enter, &on_selfreport, on_selfreport_exit);
+State state_selfreport(&on_selfreport_enter, &on_selfreport, NULL);
 State state_stressalarm(&on_stressalarm_enter, &on_stressalarm, &on_stressalarm_exit);
 State state_challengealarm(&on_challengealarm_enter, &on_challengealarm, &on_challengealarm_exit);
 State state_inactivityalarm(&on_inactivityalarm_enter, &on_inactivityalarm, &on_inactivityalarm_exit);
+State state_log_data(&on_logdata_enter, &on_logdata, &on_logdata_exit);
 Fsm fsm_main(&state_standby);
 EventQueue events;
 
@@ -200,6 +184,7 @@ void initHR()
   // Heartrate sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
+  samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
   if (!pulseSensor.begin())
   {
     Serial.println(F("Heartrate sensor failed!"));
@@ -250,6 +235,12 @@ void initFSM()
   fsm_main.add_transition(&state_stressalarm, &state_standby,
                           STRESSALARM_TIMEOUT,
                           NULL);
+  fsm_main.add_transition(&state_standby, &state_log_data,
+                          LOG_DATA,
+                          NULL);
+  fsm_main.add_transition(&state_log_data, &state_standby,
+                          LOG_DATA_TIMEOUT,
+                          NULL);
   fsm_main.add_transition(&state_stressalarm, &state_selfreport,
                           CLENCH_ACTIVATED,
                           NULL);
@@ -282,6 +273,13 @@ void initFSM()
                           NULL);
 }
 
+void initTimer() {
+  // Data acquisition setup
+  telemetryTimer.setInterval(5000);
+  telemetryTimer.expiredHandler(telemetryTimer_handler);
+  telemetryTimer.setRepeats(0); // 0 = Forever
+  telemetryTimer.start();
+}
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // SETUP FUNCTION, All initialisations happen here                            //
@@ -303,6 +301,9 @@ void setup()
   initAcce();
   initFSM();
   intVib();
+  initTimer();
+
+
   Serial.println(F("Sensors Initialize Successfully Finished"));
   Serial.println(F("Start StateMachine"));
 }
@@ -316,16 +317,24 @@ void setup()
 ////////////////////////////////////////////////////////////////////////////////
 void loop()
 {
-   tsLogData.execute();
-   tsFSM.execute();
   // All objects invoke callbacks so the whole program is event-driven
-  //  telemetryTimer.run();
-//  fsm_main.run_machine();
-//  pressureSense.run();
-//  bleCmdCallback();
+  fsm_main.run_machine();
+  telemetryTimer.run();
+  pressureSense.run();
+  checkBLECmd();
 }
 
-void bleCmdCallback()
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+// GENERAL EVENT HANDLERS. These functions handle non-state-machine events.   //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+void telemetryTimer_handler(MillisTimer &mt)
+{
+  events.push(LOG_DATA);
+}
+
+void checkBLECmd()
 {
   // If data is available from bt module,
   // print it to serial port
@@ -342,51 +351,6 @@ void bleCmdCallback()
   }
 }
 
-uint32_t currTimestamp(){
-  DateTime now = clock.now();
-  buf1 = now.unixtime();
-  return buf1;
-  }
-
-int currHR (){
-  int bpm = pulseSensor.getBeatsPerMinute();
-  return bpm;
-  }
-
-uint32_t currSteps (){
-  step = bma456.getStepCounterOutput();
-  return step;
- }
-
-void bleCallback()
-{ 
-  SerialPort.print(F("t"));
-  SerialPort.print(currTimestamp());
-  SerialPort.print(comma);
-  SerialPort.print(F("h"));
-  SerialPort.print(currHR());
-  SerialPort.print(comma);
-  SerialPort.print(F("s"));
-  SerialPort.print(currSteps());
-  SerialPort.println();
-
-  Serial.println("Data sent over BLE");
-  logToSDcard();
-}
-
-void fsmCallback()
-{
-  //  telemetryTimer.run();
-  fsm_main.run_machine();
-  pressureSense.run();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-// GENERAL EVENT HANDLERS. These functions handle non-state-machine events.   //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
 void on_clench(uint16_t pressure)
 {
   // This will be invoked when we detect that the user is clenching his fist
@@ -394,7 +358,7 @@ void on_clench(uint16_t pressure)
   Serial.print("CLENCH EVENT: ");
   Serial.println(pressure);
 
-//  events.push(CLENCH_ACTIVATED);  //******This Needs to be activated once the golves design is ready******
+  events.push(CLENCH_ACTIVATED);
 }
 
 void on_release(uint16_t pressure)
@@ -404,7 +368,7 @@ void on_release(uint16_t pressure)
   Serial.print(F("CLENCH RELEASE EVENT: "));
   Serial.println(pressure);
 
-//  events.push(CLENCH_DEACTIVATED);  //******This Needs to be activated once the golves design is ready******
+  events.push(CLENCH_DEACTIVATED);
 }
 
 void handleBLECommand(char cmd)
@@ -412,18 +376,18 @@ void handleBLECommand(char cmd)
   char numb = cmd;
   switch (numb)
   {
-  case '1':
-    events.push(CHALLENGE_DETECTED);
-    break;
-  case '2':
-    events.push(CHALLENGE_BUTTON_ACTIVATED);
-    break;
-  case '3':
-    events.push(INACTIVITY_DETECTED);
-    break;
-  case '4':
-    events.push(STRESS_DETECTED);
-    break;
+    case '1':
+      events.push(CHALLENGE_DETECTED);
+      break;
+    case '2':
+      events.push(CHALLENGE_BUTTON_ACTIVATED);
+      break;
+    case '3':
+      events.push(INACTIVITY_DETECTED);
+      break;
+    case '4':
+      events.push(STRESS_DETECTED);
+      break;
   }
 }
 
@@ -436,7 +400,7 @@ void handleBLECommand(char cmd)
 void on_standby()
 {
   check_triggers();
-//  Serial.println(F("On Standby"));
+  //  Serial.println(F("On Standby"));
 }
 
 void on_standby_enter()
@@ -444,7 +408,24 @@ void on_standby_enter()
   Serial.println(F("Standby enter"));
 }
 
+void on_logdata_enter() {
+  Serial.println(F("LogData enter"));
+}
+
+void on_logdata() {
+  if (logToSDcard() && transToBLE()) {
+    events.push(LOG_DATA_TIMEOUT);
+  }
+
+  check_triggers();
+}
+
+void on_logdata_exit() {
+  Serial.println(F("LogData Finished"));
+}
+
 unsigned long challenge_vib_rep_count = 0;
+
 void on_challenge()
 {
   vibChallenge.go();
@@ -486,9 +467,10 @@ void on_selfreport_exit()
 }
 
 void on_selfreport()
-{ 
-  logToSDcard();
-  bleCallback();
+{
+  Serial.println(F("On Self Report!!"));
+  events.push(LOG_DATA);
+  check_triggers();
 }
 
 void on_selfreport_enter()
@@ -632,12 +614,60 @@ uint16_t vib_piramid(uint16_t x, uint16_t max_x)
   }
 }
 
-void logToSDcard()
-{ 
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+// Data Collection Functions. All the functions related to activate sensors   //
+// and return each sensor value                                               //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+uint32_t currTimestamp() {
+  DateTime now = clock.now();
+  buf1 = now.unixtime();
+  return buf1;
+}
+
+int currHR () {
+
+  int bpm = pulseSensor.getBeatsPerMinute();
+  if (pulseSensor.sawStartOfBeat()) {
+  return bpm;
+  }
+}
+
+uint32_t currSteps () {
+  step = bma456.getStepCounterOutput();
+  return step;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//  Log Data: Functuon to log data into SD Card                               //
+//  and Transmit the data over BLE                                            //                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+bool transToBLE() {
+  Serial.println(F("Transmit Data to BLE Begin"));
+  SerialPort.print(F("t"));
+  SerialPort.print(currTimestamp());
+  SerialPort.print(comma);
+  SerialPort.print(F("h"));
+  SerialPort.print(currHR ());
+  SerialPort.print(comma);
+  SerialPort.print(F("s"));
+  SerialPort.print(currSteps());
+  SerialPort.println();
+
+  Serial.println("Transmit Data to BLE Finished");
+
+  return true;
+}
+
+bool logToSDcard()
+{
   //creating file name according to current date
   DateTime now = clock.now();
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
-  
+
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
@@ -650,7 +680,7 @@ void logToSDcard()
     dataFile.print(comma);
     // Datafields (HR and Steps)
     dataFile.print(F("h"));
-    dataFile.print(currHR());
+    dataFile.print(currHR ());
     dataFile.print(comma);
     dataFile.print(F("s"));
     dataFile.print(currSteps());
@@ -663,9 +693,11 @@ void logToSDcard()
     Serial.println("Error in opening the file!!");
     while (1)
       ;
+    return false;
   }
 
   Serial.println("Data Logged to SD Card");
+  return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -22,7 +22,7 @@ class EventQueue {
     QueueState state();             // Returns: READY, FULL or EMPTY
 
   private:
-    enum {max_entries = 5};        // Adjust this if 5 entries is not enough (consumes more memory when larger)
+    enum {max_entries = 12};        // Adjust this if 5 entries is not enough (consumes more memory when larger)
     
     QueueState queue_state;
     int queue_top;
