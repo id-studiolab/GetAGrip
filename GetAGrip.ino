@@ -2,7 +2,7 @@
 // niravmalsatter@gmail.com
 
 #define comma ','   // comma ','
-#define USE_ARDUINO_INTERRUPTS true
+#define USE_ARDUINO_INTERRUPTS false
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
@@ -15,24 +15,12 @@
 #include "Vibration.h"
 #include "MillisTimer.h"
 
-#define SerialPort Serial3 // Abstract serial monitor debug port
-
-// Debug and Test options
-#define _DEBUG_
-//#define _TEST_
-
-#ifdef _DEBUG_
-#define _PP(a) Serial.print(a);
-#define _PL(a) Serial.println(a);
-#else
-#define _PP(a)
-#define _PL(a)
-#endif
+#define SerialPort Serial1 // Abstract serial monitor debug port
 
 // PIN definitions
-const int CHIPSELECT_PIN = 10;
+const int CHIPSELECT_PIN = 4;
 const int VIBRATOR_PIN = 6;
-const int HEARTRATE_PIN = 0;
+const int HEARTRATE_PIN = A1;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT = A2;
 
@@ -184,6 +172,7 @@ void initHR()
   // Heartrate sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
+  // Skip the first SAMPLES_PER_SERIAL_SAMPLE in the loop().
   samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
   if (!pulseSensor.begin())
   {
@@ -320,7 +309,7 @@ void loop()
   // All objects invoke callbacks so the whole program is event-driven
   fsm_main.run_machine();
   telemetryTimer.run();
-  pressureSense.run();
+  //  pressureSense.run();
   checkBLECmd();
 }
 
@@ -429,7 +418,7 @@ unsigned long challenge_vib_rep_count = 0;
 void on_challenge()
 {
   vibChallenge.go();
-  Serial.println(F("Vib Chall go"));
+
   if (vibChallenge.finished())
   {
     // Vibration cycle is done, keep track of repetitions
@@ -629,10 +618,23 @@ uint32_t currTimestamp() {
 
 int currHR () {
 
-  int bpm = pulseSensor.getBeatsPerMinute();
-  if (pulseSensor.sawStartOfBeat()) {
-  return bpm;
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
+  while ((endtime - starttime) <= 100) // do this loop for up to 1000mS
+  {
+    if (pulseSensor.sawNewSample()) {
+
+      if (--samplesUntilReport == (byte) 0) {
+        samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
+
+        int myBPM = pulseSensor.getBeatsPerMinute();
+        if (pulseSensor.sawStartOfBeat()) {
+          return myBPM;
+        }
+      }
+    }
   }
+
 }
 
 uint32_t currSteps () {
@@ -646,15 +648,18 @@ uint32_t currSteps () {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool transToBLE() {
+  uint32_t ts = currTimestamp();
+  int hr = currHR ();
+  uint32_t steps = currSteps();
   Serial.println(F("Transmit Data to BLE Begin"));
   SerialPort.print(F("t"));
-  SerialPort.print(currTimestamp());
+  SerialPort.print(ts);
   SerialPort.print(comma);
   SerialPort.print(F("h"));
-  SerialPort.print(currHR ());
+  SerialPort.print(hr);
   SerialPort.print(comma);
   SerialPort.print(F("s"));
-  SerialPort.print(currSteps());
+  SerialPort.print(steps);
   SerialPort.println();
 
   Serial.println("Transmit Data to BLE Finished");
@@ -664,6 +669,11 @@ bool transToBLE() {
 
 bool logToSDcard()
 {
+
+  uint32_t ts = currTimestamp();
+  int hr = currHR ();
+  uint32_t steps = currSteps();
+
   //creating file name according to current date
   DateTime now = clock.now();
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
@@ -676,14 +686,14 @@ bool logToSDcard()
   {
     // Timestamp
     dataFile.print(F("t"));
-    dataFile.print(currTimestamp());
+    dataFile.print(ts);
     dataFile.print(comma);
     // Datafields (HR and Steps)
     dataFile.print(F("h"));
-    dataFile.print(currHR ());
+    dataFile.print(hr);
     dataFile.print(comma);
     dataFile.print(F("s"));
-    dataFile.print(currSteps());
+    dataFile.print(steps);
     // Newline at end of file
     dataFile.println();
     dataFile.close();
