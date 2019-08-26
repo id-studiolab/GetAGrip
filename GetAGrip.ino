@@ -20,7 +20,7 @@
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
 const int VIBRATOR_PIN = 6;
-const int HEARTRATE_PIN = A1;
+const int HEARTRATE_PIN = 10;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT = A2;
 
@@ -174,9 +174,9 @@ void initHR()
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
   // Skip the first SAMPLES_PER_SERIAL_SAMPLE in the loop().
   samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
-  if (!pulseSensor.begin())
+  if (pulseSensor.begin())
   {
-    Serial.println(F("Heartrate sensor failed!"));
+    Serial.println(F("Heartrate Initialized"));
     delay(20);
   }
 }
@@ -277,7 +277,6 @@ void initTimer() {
 void setup()
 {
   Serial.begin(115200);
-  while (!Serial);
   Wire.begin();
   Serial.println(F("Arduino started"));
   Serial.println(F("Start Initialize Sensors"));
@@ -309,7 +308,7 @@ void loop()
   // All objects invoke callbacks so the whole program is event-driven
   fsm_main.run_machine();
   telemetryTimer.run();
-  //  pressureSense.run();
+  pressureSense.run();
   checkBLECmd();
 }
 
@@ -330,13 +329,13 @@ void checkBLECmd()
   if (bt.available())
   {
     handleBLECommand((char)bt.read());
-    Serial.print((char)bt.read());
+    //    Serial.print((char)bt.read());
   }
   // If data is available from serial port,
   // print it to bt module.
-  if (Serial.available())
+  if (SerialPort.available())
   {
-    bt.write((char)Serial.read());
+    bt.write((char)SerialPort.read());
   }
 }
 
@@ -402,10 +401,14 @@ void on_logdata_enter() {
 }
 
 void on_logdata() {
+  Serial.println(F("On LogData"));
   if (logToSDcard() && transToBLE()) {
+    Serial.println(F("LogData returned true"));
     events.push(LOG_DATA_TIMEOUT);
   }
-
+  //  delay (1000);
+  //  events.push(LOG_DATA_TIMEOUT);
+  Serial.println(F("Going to check for triggers"));
   check_triggers();
 }
 
@@ -547,6 +550,7 @@ void on_inactivityalarm_exit()
 
 void check_triggers()
 {
+  //  Serial.println(F("On check triggers"));
   // Are there any state-changing events?
   // If yes, execute them.
   if (events.state() != EMPTY)
@@ -620,6 +624,7 @@ int currHR () {
 
   unsigned long starttime = millis();
   unsigned long endtime = starttime;
+
   while ((endtime - starttime) <= 100) // do this loop for up to 1000mS
   {
     if (pulseSensor.sawNewSample()) {
@@ -629,7 +634,12 @@ int currHR () {
 
         int myBPM = pulseSensor.getBeatsPerMinute();
         if (pulseSensor.sawStartOfBeat()) {
+          Serial.print (myBPM);
           return myBPM;
+        }
+        else {
+          Serial.println ("HR Failed");
+          return 0;
         }
       }
     }
@@ -662,7 +672,7 @@ bool transToBLE() {
   SerialPort.print(steps);
   SerialPort.println();
 
-  Serial.println("Transmit Data to BLE Finished");
+  Serial.println(F("Transmit Data to BLE Finished"));
 
   return true;
 }
@@ -670,18 +680,25 @@ bool transToBLE() {
 bool logToSDcard()
 {
 
+  Serial.println(F("SD Card Enter"));
+
   uint32_t ts = currTimestamp();
+  Serial.println(F("ts good"));
   int hr = currHR ();
+  Serial.println(F("hr good"));
   uint32_t steps = currSteps();
+  Serial.println(F("steps good"));
 
   //creating file name according to current date
   DateTime now = clock.now();
+  Serial.println(F("clock good"));
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
+  Serial.println(F("fname good"));
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
-
+  Serial.println(F("file open good"));
   if (dataFile)
   {
     // Timestamp
@@ -700,13 +717,13 @@ bool logToSDcard()
   }
   else
   {
-    Serial.println("Error in opening the file!!");
+    Serial.println(F("Error in opening the file!!"));
     while (1)
       ;
     return false;
   }
 
-  Serial.println("Data Logged to SD Card");
+  Serial.println(F("Data Logged to SD Card"));
   return true;
 }
 
