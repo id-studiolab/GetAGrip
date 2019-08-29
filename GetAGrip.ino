@@ -9,17 +9,16 @@
 #include <SD.h>
 #include <Wire.h>
 #include <RTClib.h>
+//#include "Adafruit_DRV2605.h"
 #include "Fsm.h"
 #include "EventQueue.h"
 #include "PressureSensor.h"
-#include "Vibration.h"
 #include "MillisTimer.h"
 
 #define SerialPort Serial1 // Abstract serial monitor debug port
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
-const int VIBRATOR_PIN = 6;
 const int HEARTRATE_PIN = 10;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT = A2;
@@ -56,13 +55,6 @@ bool logToSDcard();
 bool transToBLE();
 void checkBLECmd();
 
-uint16_t vib_zero(uint16_t, uint16_t);
-uint16_t vib_half(uint16_t, uint16_t);
-uint16_t vib_full(uint16_t, uint16_t);
-uint16_t vib_rampup(uint16_t, uint16_t);
-uint16_t vib_rampdown(uint16_t, uint16_t);
-uint16_t vib_piramid(uint16_t, uint16_t);
-
 // State machine
 const int PROGMEM STRESS_DETECTED = 1;
 const int PROGMEM CHALLENGE_BUTTON_ACTIVATED = 2;
@@ -94,22 +86,7 @@ PulseSensorPlayground pulseSensor;
 uint32_t step = 0;
 
 // Vibration
-const int PROGMEM CHALLENGE_VIB_REPETITIONS = 1000;
-VibrationElement constZero(1, 500, 1, &vib_zero);        //  _______ <- 0%
-VibrationElement constHalf(1, 1500, 1, &vib_half);       //  ------- <- 50%
-VibrationElement constFull(1, 1500, 1, &vib_full);       //  ------- <- 100%
-VibrationElement rampUp(100, 30, 1, &vib_rampup);        //  goes from zero to MAX (scaled over time)
-VibrationElement sawtoothUp(100, 2, 5, &vib_rampup);     //  rampup many times
-VibrationElement rampDown(100, 10, 1, &vib_rampdown);    //  goes from MAX to zero (scaled over time)
-VibrationElement sawtoothDown(100, 2, 5, &vib_rampdown); //  rampdown many times
-//  Example of a combined ramp-up and ramp-down in one function.
-//  It's easier to seperate this behaviour in multiple functions for clarity
-VibrationElement piramid(100, 5, 10, &vib_piramid);
-
-Vibration vibStressAlarm(VIBRATOR_PIN); // These vibration patterns are assembled in setup();
-Vibration vibChallengeAlarm(VIBRATOR_PIN);
-Vibration vibChallenge(VIBRATOR_PIN);
-Vibration vibInactiveAlarm(VIBRATOR_PIN);
+//Adafruit_DRV2605 drv;
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -197,20 +174,14 @@ void initAcce()
 
 void intVib()
 {
-  pinMode(VIBRATOR_PIN, OUTPUT);
-  digitalWrite(VIBRATOR_PIN, LOW);
-
-  // Build vibration patterns out of elements
-  vibStressAlarm.append(rampUp);
-  vibStressAlarm.append(rampDown);
-  vibStressAlarm.append(piramid);
-  vibChallengeAlarm.append(constFull);
-  vibChallengeAlarm.append(constHalf);
-  vibInactiveAlarm.append(rampDown);
-  vibChallenge.append(rampUp);
-  vibChallenge.append(constZero);
-  vibChallenge.append(rampDown);
-  vibChallenge.append(constZero);
+//  Serial.println("DRV test");
+//  drv.begin();
+//
+//  drv.selectLibrary(6);
+//  drv.useLRA();
+//  // I2C trigger by sending 'go' command
+//  // default, internal trigger when sending GO command
+//  drv.setMode(DRV2605_MODE_INTTRIG);
 }
 
 void initFSM()
@@ -288,7 +259,7 @@ void setup()
   initPressureSens();
   initAcce();
   initFSM();
-  intVib();
+//  intVib();
   initTimer();
 
 
@@ -308,8 +279,8 @@ void loop()
   // All objects invoke callbacks so the whole program is event-driven
   fsm_main.run_machine();
   telemetryTimer.run();
-  pressureSense.run();
   checkBLECmd();
+  pressureSense.run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -324,10 +295,12 @@ void telemetryTimer_handler(MillisTimer &mt)
 
 void checkBLECmd()
 {
+  //   Serial.println(F("BLE Command Enter"));
   // If data is available from bt module,
   // print it to serial port
   if (bt.available())
   {
+    Serial.println(F("BLE Read"));
     handleBLECommand((char)bt.read());
     //    Serial.print((char)bt.read());
   }
@@ -335,6 +308,7 @@ void checkBLECmd()
   // print it to bt module.
   if (SerialPort.available())
   {
+    Serial.println(F("BLE write"));
     bt.write((char)SerialPort.read());
   }
 }
@@ -397,46 +371,30 @@ void on_standby_enter()
 }
 
 void on_logdata_enter() {
-  Serial.println(F("LogData enter"));
+  //  Serial.println(F("LogData enter"));
 }
 
 void on_logdata() {
-  Serial.println(F("On LogData"));
+  //  Serial.println(F("On LogData"));
   if (logToSDcard() && transToBLE()) {
-    Serial.println(F("LogData returned true"));
+    //    Serial.println(F("LogData returned true"));
     events.push(LOG_DATA_TIMEOUT);
   }
   //  delay (1000);
   //  events.push(LOG_DATA_TIMEOUT);
-  Serial.println(F("Going to check for triggers"));
+  //  Serial.println(F("Going to check for triggers"));
   check_triggers();
 }
 
 void on_logdata_exit() {
-  Serial.println(F("LogData Finished"));
+  //  Serial.println(F("LogData Finished"));
 }
-
-unsigned long challenge_vib_rep_count = 0;
 
 void on_challenge()
 {
-  vibChallenge.go();
 
-  if (vibChallenge.finished())
-  {
-    // Vibration cycle is done, keep track of repetitions
-    // and stop after x repetitions.
-    vibChallenge.reset();
-    ++challenge_vib_rep_count;
-
-    if (challenge_vib_rep_count >= CHALLENGE_VIB_REPETITIONS)
-    {
-      challenge_vib_rep_count = 0;
-      // If the user forgets to press the button, we do it for them after
-      // many repetitions
-      events.push(CHALLENGE_BUTTON_ACTIVATED);
-    }
-  }
+//  drv.setWaveform(0, 54);  // Pulsing medium 1, see datasheet part 11.2
+//  drv.setWaveform(2, 0);  // end of waveforms
 
   check_triggers();
 }
@@ -448,8 +406,7 @@ void on_challenge_enter()
 
 void on_challenge_exit()
 {
-  vibChallenge.reset();
-  challenge_vib_rep_count = 0;
+
   Serial.println(F("Challenge exit"));
 }
 
@@ -472,15 +429,8 @@ void on_selfreport_enter()
 
 void on_stressalarm()
 {
-  vibStressAlarm.go();
+//  drv.setWaveform(0, 120);  // Buzz 1 - 100%, see datasheet part 11.2
 
-  if (vibStressAlarm.finished())
-  {
-    // Vibration is done
-    vibStressAlarm.reset(); // Make sure vibration stops and the whole cycle resets
-    Serial.println(F("vibStressAlarm is done!"));
-    events.push(STRESSALARM_TIMEOUT);
-  }
   check_triggers();
 }
 
@@ -491,24 +441,13 @@ void on_stressalarm_enter()
 
 void on_stressalarm_exit()
 {
-  vibStressAlarm.reset(); // Stop the vibration in case we were interrupted
   Serial.println(F("Stressalarm exit"));
 }
 
 void on_challengealarm()
 {
-  static unsigned long repetition_counter = 0;
 
-  vibChallengeAlarm.go();
-
-  if (vibChallengeAlarm.finished())
-  {
-    // Vibration cycle is done
-    Serial.println(F("Challenge alarm done!"));
-    vibChallengeAlarm.reset();
-    events.push(CHALLENGEALARM_TIMEOUT);
-  }
-
+//  drv.setWaveform(0, 14);
   check_triggers();
 }
 
@@ -519,21 +458,12 @@ void on_challengealarm_enter()
 
 void on_challengealarm_exit()
 {
-  vibChallengeAlarm.reset(); // Stop the vibration in case we were interrupted
   Serial.println(F("Challenge alarm exit"));
 }
 
 void on_inactivityalarm()
 {
-  vibInactiveAlarm.go();
-
-  if (vibInactiveAlarm.finished())
-  {
-    // Vibration is done
-    vibInactiveAlarm.reset();
-    Serial.println(F("vibInactiveAlarm done!"));
-    events.push(INACTIVITYALARM_TIMEOUT);
-  }
+//  drv.setWaveform(0, 15);
 
   check_triggers();
 }
@@ -556,54 +486,6 @@ void check_triggers()
   if (events.state() != EMPTY)
   {
     fsm_main.trigger(events.pop());
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
-// VIBRATION ELEMENT ALGORITHMS. These functions contain the calculations     //
-// which determine the next value in a vibration pattern. x is the moving     //
-// variable, max_x contains the maximum value x will reach. Use VIBRATION_MAX //
-// to determine the maximum value you can and should return.                  //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-uint16_t vib_zero(uint16_t x, uint16_t max_x)
-{
-  return 0;
-}
-
-uint16_t vib_half(uint16_t x, uint16_t max_x)
-{
-  return VIBRATION_MAX / 2;
-}
-
-uint16_t vib_full(uint16_t x, uint16_t max_x)
-{
-  return VIBRATION_MAX;
-}
-
-uint16_t vib_rampup(uint16_t x, uint16_t max_x)
-{
-  float xstep = VIBRATION_MAX / max_x;
-  return xstep * (x + 1);
-}
-
-uint16_t vib_rampdown(uint16_t x, uint16_t max_x)
-{
-  float xstep = VIBRATION_MAX / max_x;
-  return VIBRATION_MAX - xstep * x;
-}
-
-uint16_t vib_piramid(uint16_t x, uint16_t max_x)
-{
-  float xstep = VIBRATION_MAX / (max_x / 2);
-  if (x < max_x / 2)
-  {
-    return xstep * (x + 1);
-  }
-  else
-  {
-    return VIBRATION_MAX - xstep * (x - (max_x / 2));
   }
 }
 
@@ -664,12 +546,15 @@ bool transToBLE() {
   Serial.println(F("Transmit Data to BLE Begin"));
   SerialPort.print(F("t"));
   SerialPort.print(ts);
+  Serial.println(F("ts okay"));
   SerialPort.print(comma);
   SerialPort.print(F("h"));
   SerialPort.print(hr);
+  Serial.println(F("hr okay"));
   SerialPort.print(comma);
   SerialPort.print(F("s"));
   SerialPort.print(steps);
+  Serial.println(F("steps okay"));
   SerialPort.println();
 
   Serial.println(F("Transmit Data to BLE Finished"));
@@ -680,25 +565,25 @@ bool transToBLE() {
 bool logToSDcard()
 {
 
-  Serial.println(F("SD Card Enter"));
-
+  //  Serial.println(F("SD Card Enter"));
+ 
   uint32_t ts = currTimestamp();
-  Serial.println(F("ts good"));
+  //  Serial.println(F("ts good"));
   int hr = currHR ();
-  Serial.println(F("hr good"));
+  //  Serial.println(F("hr good"));
   uint32_t steps = currSteps();
-  Serial.println(F("steps good"));
+  //  Serial.println(F("steps good"));
 
   //creating file name according to current date
   DateTime now = clock.now();
-  Serial.println(F("clock good"));
+  //  Serial.println(F("clock good"));
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
-  Serial.println(F("fname good"));
+  //  Serial.println(F("fname good"));
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
-  Serial.println(F("file open good"));
+  //  Serial.println(F("file open good"));
   if (dataFile)
   {
     // Timestamp
