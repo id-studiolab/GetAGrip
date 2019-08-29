@@ -9,7 +9,6 @@
 #include <SD.h>
 #include <Wire.h>
 #include <RTClib.h>
-//#include "Adafruit_DRV2605.h"
 #include "Fsm.h"
 #include "EventQueue.h"
 #include "PressureSensor.h"
@@ -86,7 +85,6 @@ PulseSensorPlayground pulseSensor;
 uint32_t step = 0;
 
 // Vibration
-//Adafruit_DRV2605 drv;
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -174,14 +172,6 @@ void initAcce()
 
 void intVib()
 {
-//  Serial.println("DRV test");
-//  drv.begin();
-//
-//  drv.selectLibrary(6);
-//  drv.useLRA();
-//  // I2C trigger by sending 'go' command
-//  // default, internal trigger when sending GO command
-//  drv.setMode(DRV2605_MODE_INTTRIG);
 }
 
 void initFSM()
@@ -259,7 +249,7 @@ void setup()
   initPressureSens();
   initAcce();
   initFSM();
-//  intVib();
+  intVib();
   initTimer();
 
 
@@ -371,31 +361,24 @@ void on_standby_enter()
 }
 
 void on_logdata_enter() {
-  //  Serial.println(F("LogData enter"));
+    Serial.println(F("LogData enter"));
 }
 
 void on_logdata() {
-  //  Serial.println(F("On LogData"));
   if (logToSDcard() && transToBLE()) {
-    //    Serial.println(F("LogData returned true"));
     events.push(LOG_DATA_TIMEOUT);
   }
-  //  delay (1000);
-  //  events.push(LOG_DATA_TIMEOUT);
-  //  Serial.println(F("Going to check for triggers"));
   check_triggers();
 }
 
 void on_logdata_exit() {
-  //  Serial.println(F("LogData Finished"));
+    Serial.println(F("LogData Finished"));
 }
 
 void on_challenge()
 {
 
-//  drv.setWaveform(0, 54);  // Pulsing medium 1, see datasheet part 11.2
-//  drv.setWaveform(2, 0);  // end of waveforms
-
+ Serial.println(F("On Challenge"));
   check_triggers();
 }
 
@@ -429,8 +412,7 @@ void on_selfreport_enter()
 
 void on_stressalarm()
 {
-//  drv.setWaveform(0, 120);  // Buzz 1 - 100%, see datasheet part 11.2
-
+   Serial.println(F("On Stress Alarm"));
   check_triggers();
 }
 
@@ -446,8 +428,7 @@ void on_stressalarm_exit()
 
 void on_challengealarm()
 {
-
-//  drv.setWaveform(0, 14);
+  Serial.println(F("On Challenge Alarm"));
   check_triggers();
 }
 
@@ -463,7 +444,7 @@ void on_challengealarm_exit()
 
 void on_inactivityalarm()
 {
-//  drv.setWaveform(0, 15);
+Serial.println(F("On Inactivity Alarm"));
 
   check_triggers();
 }
@@ -480,7 +461,6 @@ void on_inactivityalarm_exit()
 
 void check_triggers()
 {
-  //  Serial.println(F("On check triggers"));
   // Are there any state-changing events?
   // If yes, execute them.
   if (events.state() != EMPTY)
@@ -540,10 +520,11 @@ uint32_t currSteps () {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool transToBLE() {
+    Serial.println(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
-  int hr = currHR ();
+  int hr = 0;
   uint32_t steps = currSteps();
-  Serial.println(F("Transmit Data to BLE Begin"));
+
   SerialPort.print(F("t"));
   SerialPort.print(ts);
   Serial.println(F("ts okay"));
@@ -611,19 +592,3 @@ bool logToSDcard()
   Serial.println(F("Data Logged to SD Card"));
   return true;
 }
-
-///////////////////////////////////////////////////////////////////////////////
-//                                                                           //
-// Returns a zero padded string based on a two-digit input value             //
-//                                                                           //
-// Input:  a single- or double digit number                                  //
-// Output: if the input was a single digit number, the output will have a    //
-//         leading zero. Otherwise the double digit number will be returned  //
-//                                                                           //
-///////////////////////////////////////////////////////////////////////////////
-String ZeroPad(int value)
-{
-  String returnVal = (value > 9 ? "" : String(F("0"))) + String(value);
-  return returnVal;
-}
-// Are you still reading this?
