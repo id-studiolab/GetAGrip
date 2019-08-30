@@ -38,8 +38,6 @@
 #define _PL(a)
 #endif
 
-
-
 // PIN definitions
 const int CHIPSELECT_PIN  = 4;
 const int HEARTRATE_PIN = 10;
@@ -67,7 +65,6 @@ PulseSensorPlayground pulseSensor;
 
 //Step Counter (Accelerometer)
 uint32_t step = 0;
-
 
 Scheduler tsLogData;
 
@@ -136,12 +133,6 @@ void setup() {
   initHR();
   initClk();
   initAcce();
-
-  //  if (!SD.begin(CHIPSELECT_PIN)) {
-  //    Serial.println("ERROR: NO SDCARD DETECTED!");
-  //  } else {
-  //  }
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
