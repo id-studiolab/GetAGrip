@@ -1,5 +1,4 @@
-// By Richard Bekking & Nirav Malsattar
-// richard@electronicsdesign.nl
+//Nirav Malsattar
 // niravmalsatter@gmail.com
 
 // #define _TASK_TIMECRITICAL      // Enable monitoring scheduling overruns
@@ -16,8 +15,9 @@
 // #define _TASK_OO_CALLBACKS      // Support for dynamic callback method binding
 
 #define SerialPort Serial1 // Abstract serial monitor debug port
+#define USE_ARDUINO_INTERRUPTS false
+#define comma ','   // comma ','
 
-#define USE_ARDUINO_INTERRUPTS true
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include <TaskScheduler.h> // Scheduling for arduino based task https://github.com/arkhipenko/TaskScheduler/wiki/API-Task
@@ -57,9 +57,12 @@ HM1X_BT bt;
 
 // Realtime Clock
 RTC_DS1307 clock; //define a object of DS1307 class
-char buf1[10]; //array buffer to store time data in char
+uint32_t buf1;    //array buffer to store time data in char
+char fname[10];   //array buffer to store filename in char
 
 // Heartrate
+byte samplesUntilReport;
+const byte SAMPLES_PER_SERIAL_SAMPLE = 10;
 const int PROGMEM HEARTRATE_THRESHOLD = 550;
 PulseSensorPlayground pulseSensor;
 
@@ -103,8 +106,11 @@ void initHR() {
   // Heartrate sensor
   pulseSensor.analogInput(HEARTRATE_PIN);
   pulseSensor.setThreshold(HEARTRATE_THRESHOLD);
-  if (!pulseSensor.begin()) {
-    Serial.println(F("Heartrate sensor failed!"));
+  // Skip the first SAMPLES_PER_SERIAL_SAMPLE in the loop().
+  samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
+  if (pulseSensor.begin())
+  {
+    Serial.println(F("Heartrate Initialized"));
     delay(20);
   }
 }
@@ -133,6 +139,8 @@ void setup() {
   initHR();
   initClk();
   initAcce();
+
+  Serial.println(F("Sensor srtup finished"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,32 +157,95 @@ void loop() {
 void fbleCommCallback() {
   // If data is available from bt module,
   // print it to serial port
-  if (bt.available()) {
-    Serial.write((char) bt.read());
+  if (bt.available())
+  {
+    handleBLECommand((char)bt.read());
   }
   // If data is available from serial port,
   // print it to bt module.
-  if (Serial.available()) {
-    bt.write((char) Serial.read());
+  if (SerialPort.available())
+  {
+    Serial.println(F("BLE write"));
+    bt.write((char)SerialPort.read());
   }
 }
 
-void bleCallback() {
+void handleBLECommand(char cmd)
+{
+  char numb = cmd;
+  switch (numb)
+  {
+    case '1':
+      //      events.push(CHALLENGE_DETECTED);
+      Serial.print(F("Vib Challenge Detected"));
+      break;
+    case '2':
+      //      events.push(CHALLENGE_BUTTON_ACTIVATED);
+      Serial.print(F("Vib Challenge Activated"));
+      break;
+    case '3':
+      //      events.push(INACTIVITY_DETECTED);
+      Serial.print(F("Vib Inactivity Detected"));
+      break;
+    case '4':
+      //      events.push(STRESS_DETECTED);
+      Serial.print(F("Vib Stress Detected"));
+      break;
+  }
+}
+
+uint32_t currTimestamp() {
   DateTime now = clock.now();
-  sprintf(buf1, "%02d:%02d:%02d %02d/%02d/%02d",  now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+  buf1 = now.unixtime();
+  return buf1;
+}
 
-  int bpm = pulseSensor.getBeatsPerMinute();  // Calls function on our pulseSensor object that returns BPM as an "int".
+int currHR () {
+
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
+
+  while ((endtime - starttime) <= 100) // do this loop for up to 1000mS
+  {
+    if (pulseSensor.sawNewSample()) {
+
+      if (--samplesUntilReport == (byte) 0) {
+        samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
+
+        int myBPM = pulseSensor.getBeatsPerMinute();
+        if (pulseSensor.sawStartOfBeat()) {
+          Serial.print (myBPM);
+          return myBPM;
+        }
+        else {
+          Serial.println ("HR Failed");
+          return 0;
+        }
+      }
+    }
+  }
+}
+
+uint32_t currSteps () {
   step = bma456.getStepCounterOutput();
+  return step;
+}
 
-  SerialPort.print(F("T: "));
-  SerialPort.print(buf1);
-  SerialPort.print("\n");
-  SerialPort.print(F("HR: "));
-  SerialPort.print(bpm);
-  SerialPort.print("\n");
-  SerialPort.print(F("Step: "));
-  SerialPort.print(step);
+void bleCallback() {
+  Serial.println(F("Transmit Data to BLE Begin"));
+  uint32_t ts = currTimestamp();
+  int hr = currHR();
+  uint32_t steps = currSteps();
+
+  SerialPort.print(F("t"));
+  SerialPort.print(ts);
+  SerialPort.print(comma);
+  SerialPort.print(F("h"));
+  SerialPort.print(hr);
+  SerialPort.print(comma);
+  SerialPort.print(F("s"));
+  SerialPort.print(steps);
   SerialPort.println();
-  SerialPort.println();
-  SerialPort.println();
+
+  Serial.println(F("Transmit Data to BLE Finished"));
 }
