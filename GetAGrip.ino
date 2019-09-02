@@ -50,8 +50,8 @@ void on_logdata_exit();
 void check_triggers();
 void logDataCallback();
 void contLoopCallback();
-bool logToSDcard();
-bool transToBLE();
+void logToSDcard();
+void transToBLE();
 void checkBLECmd();
 
 // State machine
@@ -239,6 +239,7 @@ void setup()
 {
   Serial.begin(115200);
   Wire.begin();
+  delay (1000);
   Serial.println(F("Arduino started"));
   Serial.println(F("Start Initialize Sensors"));
 
@@ -292,7 +293,6 @@ void checkBLECmd()
   {
     Serial.println(F("BLE Read"));
     handleBLECommand((char)bt.read());
-    //    Serial.print((char)bt.read());
   }
   // If data is available from serial port,
   // print it to bt module.
@@ -361,24 +361,28 @@ void on_standby_enter()
 }
 
 void on_logdata_enter() {
-    Serial.println(F("LogData enter"));
+  Serial.println(F("LogData enter"));
 }
 
 void on_logdata() {
-  if (logToSDcard() && transToBLE()) {
-    events.push(LOG_DATA_TIMEOUT);
-  }
+  //  if (logToSDcard() && transToBLE()) {
+  //    events.push(LOG_DATA_TIMEOUT);
+  //  }
+//  logToSDcard();
+  transToBLE();
+  Serial.println("back in log_data");
+  events.push(LOG_DATA_TIMEOUT);
+  Serial.println("log timeout push done");
   check_triggers();
 }
 
 void on_logdata_exit() {
-    Serial.println(F("LogData Finished"));
+  Serial.println(F("LogData Finished"));
 }
 
 void on_challenge()
 {
-
- Serial.println(F("On Challenge"));
+  Serial.println(F("On Challenge"));
   check_triggers();
 }
 
@@ -393,9 +397,9 @@ void on_challenge_exit()
   Serial.println(F("Challenge exit"));
 }
 
-void on_selfreport_exit()
+void on_selfreport_enter()
 {
-  Serial.println(F("Self Report Succeed!!"));
+  Serial.println(F("Selfreport enter"));
 }
 
 void on_selfreport()
@@ -405,15 +409,9 @@ void on_selfreport()
   check_triggers();
 }
 
-void on_selfreport_enter()
+void on_selfreport_exit()
 {
-  Serial.println(F("Selfreport enter"));
-}
-
-void on_stressalarm()
-{
-   Serial.println(F("On Stress Alarm"));
-  check_triggers();
+  Serial.println(F("Self Report Succeed!!"));
 }
 
 void on_stressalarm_enter()
@@ -421,15 +419,16 @@ void on_stressalarm_enter()
   Serial.println(F("Stressalarm enter"));
 }
 
+void on_stressalarm()
+{
+  Serial.println(F("On Stress Alarm"));
+  events.push(STRESSALARM_TIMEOUT);
+  check_triggers();
+}
+
 void on_stressalarm_exit()
 {
   Serial.println(F("Stressalarm exit"));
-}
-
-void on_challengealarm()
-{
-  Serial.println(F("On Challenge Alarm"));
-  check_triggers();
 }
 
 void on_challengealarm_enter()
@@ -437,21 +436,29 @@ void on_challengealarm_enter()
   Serial.println(F("Challenge alarm enter"));
 }
 
+void on_challengealarm()
+{
+  Serial.println(F("On Challenge Alarm"));
+  events.push(CHALLENGEALARM_TIMEOUT);
+  check_triggers();
+
+}
+
 void on_challengealarm_exit()
 {
   Serial.println(F("Challenge alarm exit"));
 }
 
-void on_inactivityalarm()
-{
-Serial.println(F("On Inactivity Alarm"));
-
-  check_triggers();
-}
-
 void on_inactivityalarm_enter()
 {
   Serial.println(F("Inactivity alarm enter"));
+}
+
+void on_inactivityalarm()
+{
+  Serial.println(F("On Inactivity Alarm"));
+  events.push(INACTIVITYALARM_TIMEOUT);
+  check_triggers();
 }
 
 void on_inactivityalarm_exit()
@@ -487,14 +494,16 @@ int currHR () {
   unsigned long starttime = millis();
   unsigned long endtime = starttime;
 
-  while ((endtime - starttime) <= 100) // do this loop for up to 1000mS
+  int myBPM;
+  //
+  while ((endtime - starttime) <= 1000) // do this loop for up to 1000mS
   {
     if (pulseSensor.sawNewSample()) {
 
       if (--samplesUntilReport == (byte) 0) {
         samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
 
-        int myBPM = pulseSensor.getBeatsPerMinute();
+        myBPM = pulseSensor.getBeatsPerMinute();
         if (pulseSensor.sawStartOfBeat()) {
           Serial.print (myBPM);
           return myBPM;
@@ -506,7 +515,6 @@ int currHR () {
       }
     }
   }
-
 }
 
 uint32_t currSteps () {
@@ -519,52 +527,44 @@ uint32_t currSteps () {
 //  and Transmit the data over BLE                                            //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-bool transToBLE() {
-    Serial.println(F("Transmit Data to BLE Begin"));
+void transToBLE() {
+  Serial.println(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
-  int hr = 0;
+  int hr = currHR ();
   uint32_t steps = currSteps();
 
   SerialPort.print(F("t"));
   SerialPort.print(ts);
-  Serial.println(F("ts okay"));
   SerialPort.print(comma);
   SerialPort.print(F("h"));
   SerialPort.print(hr);
-  Serial.println(F("hr okay"));
   SerialPort.print(comma);
   SerialPort.print(F("s"));
   SerialPort.print(steps);
-  Serial.println(F("steps okay"));
   SerialPort.println();
 
   Serial.println(F("Transmit Data to BLE Finished"));
 
-  return true;
+  //  return true;
 }
 
-bool logToSDcard()
+void logToSDcard()
 {
 
   //  Serial.println(F("SD Card Enter"));
- 
+
   uint32_t ts = currTimestamp();
-  //  Serial.println(F("ts good"));
   int hr = currHR ();
-  //  Serial.println(F("hr good"));
   uint32_t steps = currSteps();
-  //  Serial.println(F("steps good"));
 
   //creating file name according to current date
   DateTime now = clock.now();
-  //  Serial.println(F("clock good"));
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
-  //  Serial.println(F("fname good"));
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
-  //  Serial.println(F("file open good"));
+
   if (dataFile)
   {
     // Timestamp
@@ -580,15 +580,10 @@ bool logToSDcard()
     // Newline at end of file
     dataFile.println();
     dataFile.close();
+    Serial.println(F("Data Logged to SD Card"));
   }
   else
   {
     Serial.println(F("Error in opening the file!!"));
-    while (1)
-      ;
-    return false;
   }
-
-  Serial.println(F("Data Logged to SD Card"));
-  return true;
 }
