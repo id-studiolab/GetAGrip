@@ -17,10 +17,12 @@
 #include "Adafruit_DRV2605.h"
 
 #define TCAADDR 0x5A
+#define RTCADDR 0x68
 #define SerialPort Serial1 // Abstract serial monitor debug port
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
+const int CHALLENGE_BUTTON = 6;
 const int HEARTRATE_PIN = 10;
 const int PRESSURE_OUTPUT = 8;
 const int PRESSURE_INPUT = A2;
@@ -292,19 +294,13 @@ void telemetryTimer_handler(MillisTimer &mt)
 
 void checkBLECmd()
 {
-  //   Serial.println(F("BLE Command Enter"));
-  // If data is available from bt module,
-  // print it to serial port
   if (bt.available())
   {
-    Serial.println(F("BLE Read"));
     handleBLECommand((char)bt.read());
   }
-  // If data is available from serial port,
-  // print it to bt module.
+
   if (SerialPort.available())
   {
-    Serial.println(F("BLE write"));
     bt.write((char)SerialPort.read());
   }
 }
@@ -334,16 +330,16 @@ void handleBLECommand(char cmd)
   char numb = cmd;
   switch (numb)
   {
-    case '1':
+    case '0':
       events.push(CHALLENGE_DETECTED);
       break;
-    case '2':
+    case '1':
       events.push(CHALLENGE_BUTTON_ACTIVATED);
       break;
-    case '3':
+    case '2':
       events.push(INACTIVITY_DETECTED);
       break;
-    case '4':
+    case '3':
       events.push(STRESS_DETECTED);
       break;
   }
@@ -351,7 +347,7 @@ void handleBLECommand(char cmd)
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-// GENERAL Vibration HANDLERS.                                                //
+// GENERAL I2C HANDLERS for getting value from each sensor with I2C bus.      //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -362,6 +358,15 @@ void tcaselect(uint8_t i) {
   Wire.endTransmission();
   Wire.begin();
 }
+
+void tcaselect2(uint8_t i) {
+  if (i < 7) return;
+  Wire.beginTransmission(RTCADDR);
+  Wire.write (1 << i);
+  Wire.endTransmission();
+  Wire.begin();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // STATE MACHINE EVENT HANDLERS. These functions are specifically for the     //
@@ -384,22 +389,16 @@ void on_logdata_enter() {
 }
 
 void on_logdata() {
-  //  if (logToSDcard() && transToBLE()) {
-  //    events.push(LOG_DATA_TIMEOUT);
-  //  }
   logToSDcard();
   delay (100);
   transToBLE();
-  Serial.println("back in log_data");
   events.push(LOG_DATA_TIMEOUT);
-  Serial.println("log timeout push done");
   check_triggers();
 }
 
 void on_logdata_exit() {
   Serial.println(F("LogData Finished"));
 }
-
 
 void on_challenge_enter()
 {
@@ -456,7 +455,7 @@ void on_stressalarm()
 {
   Serial.println(F("On Stress Alarm"));
 
-  for (int i = 0; i < 5;) {
+  for (int i = 0; i < 3;) {
     tcaselect(0);
     // put your main code here, to run repeatedly:
     drv.useLRA();
@@ -466,7 +465,7 @@ void on_stressalarm()
     i++;
     delay(1000);
   }
-  
+
   events.push(STRESSALARM_TIMEOUT);
   check_triggers();
 }
@@ -485,7 +484,7 @@ void on_challengealarm()
 {
   Serial.println(F("On Challenge Alarm"));
 
-  for (int i = 0; i < 5;) {
+  for (int i = 0; i < 3;) {
     tcaselect(0);
     // put your main code here, to run repeatedly:
     drv.useLRA();
@@ -495,7 +494,7 @@ void on_challengealarm()
     i++;
     delay(1000);
   }
-  
+
   events.push(CHALLENGEALARM_TIMEOUT);
   check_triggers();
 }
@@ -513,7 +512,7 @@ void on_inactivityalarm_enter()
 void on_inactivityalarm()
 {
   Serial.println(F("On Inactivity Alarm"));
-  for (int i = 0; i < 5;) {
+  for (int i = 0; i < 3;) {
     tcaselect(0);
     // put your main code here, to run repeatedly:
     drv.useLRA();
@@ -550,8 +549,12 @@ void check_triggers()
 ////////////////////////////////////////////////////////////////////////////////
 
 uint32_t currTimestamp() {
+  tcaselect2(0);
   DateTime now = clock.now();
   buf1 = now.unixtime();
+
+  sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
+
   return buf1;
 }
 
@@ -594,7 +597,7 @@ uint32_t currSteps () {
 ////////////////////////////////////////////////////////////////////////////////
 
 void transToBLE() {
-  Serial.println(F("Transmit Data to BLE Begin"));
+  //  Serial.println(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
   int hr = currHR ();
   uint32_t steps = currSteps();
@@ -614,13 +617,6 @@ void transToBLE() {
   //  return true;
 }
 
-void prepFname() {
-  //  //creating file name according to current date
-  DateTime now = clock.now();
-  sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
-  delay (20);
-}
-
 void logToSDcard()
 {
   Serial.println(F("SD Card Enter"));
@@ -629,8 +625,6 @@ void logToSDcard()
   int hr = currHR ();
   uint32_t steps = currSteps();
 
-  DateTime now = clock.now();
-  sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
