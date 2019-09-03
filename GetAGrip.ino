@@ -3,17 +3,20 @@
 
 #define comma ','   // comma ','
 #define USE_ARDUINO_INTERRUPTS false
+#include <SPI.h>
+#include <SD.h>
+#include <Wire.h>
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
-#include <SD.h>
-#include <Wire.h>
 #include <RTClib.h>
 #include "Fsm.h"
 #include "EventQueue.h"
 #include "PressureSensor.h"
 #include "MillisTimer.h"
+#include "Adafruit_DRV2605.h"
 
+#define TCAADDR 0x5A
 #define SerialPort Serial1 // Abstract serial monitor debug port
 
 // PIN definitions
@@ -73,7 +76,7 @@ HM1X_BT bt;
 // Realtime Clock
 RTC_DS1307 clock; //define a object of DS1307 class
 uint32_t buf1;    //array buffer to store time data in char
-char fname[10];   //array buffer to store filename in char
+char fname[20];   //array buffer to store filename in char
 
 // Heartrate
 byte samplesUntilReport;
@@ -85,6 +88,7 @@ PulseSensorPlayground pulseSensor;
 uint32_t step = 0;
 
 // Vibration
+Adafruit_DRV2605 drv;
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -172,6 +176,9 @@ void initAcce()
 
 void intVib()
 {
+  drv.begin();
+  drv.selectLibrary(6);
+  drv.useLRA();
 }
 
 void initFSM()
@@ -252,7 +259,6 @@ void setup()
   initFSM();
   intVib();
   initTimer();
-
 
   Serial.println(F("Sensors Initialize Successfully Finished"));
   Serial.println(F("Start StateMachine"));
@@ -345,6 +351,19 @@ void handleBLECommand(char cmd)
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
+// GENERAL Vibration HANDLERS.                                                //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+void tcaselect(uint8_t i) {
+  if (i < 7) return;
+  Wire.beginTransmission(TCAADDR);
+  Wire.write (1 << i);
+  Wire.endTransmission();
+  Wire.begin();
+}
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
 // STATE MACHINE EVENT HANDLERS. These functions are specifically for the     //
 // main state-machine which handles the bulk of the buisness.                 //
 //                                                                            //
@@ -368,7 +387,8 @@ void on_logdata() {
   //  if (logToSDcard() && transToBLE()) {
   //    events.push(LOG_DATA_TIMEOUT);
   //  }
-//  logToSDcard();
+  logToSDcard();
+  delay (100);
   transToBLE();
   Serial.println("back in log_data");
   events.push(LOG_DATA_TIMEOUT);
@@ -380,15 +400,28 @@ void on_logdata_exit() {
   Serial.println(F("LogData Finished"));
 }
 
-void on_challenge()
-{
-  Serial.println(F("On Challenge"));
-  check_triggers();
-}
 
 void on_challenge_enter()
 {
   Serial.println(F("Challenge enter"));
+}
+
+void on_challenge()
+{
+  Serial.println(F("On Challenge"));
+
+  for (int i = 0; i < 10;) {
+    tcaselect(0);
+    // put your main code here, to run repeatedly:
+    drv.useLRA();
+    drv.setWaveform(0, 52);
+    drv.setWaveform(1, 0);
+    drv.go();
+    i++;
+    delay(1000);
+  }
+  events.push(CHALLENGE_BUTTON_ACTIVATED);
+  check_triggers();
 }
 
 void on_challenge_exit()
@@ -422,6 +455,18 @@ void on_stressalarm_enter()
 void on_stressalarm()
 {
   Serial.println(F("On Stress Alarm"));
+
+  for (int i = 0; i < 5;) {
+    tcaselect(0);
+    // put your main code here, to run repeatedly:
+    drv.useLRA();
+    drv.setWaveform(0, 7);
+    drv.setWaveform(1, 0);
+    drv.go();
+    i++;
+    delay(1000);
+  }
+  
   events.push(STRESSALARM_TIMEOUT);
   check_triggers();
 }
@@ -439,9 +484,20 @@ void on_challengealarm_enter()
 void on_challengealarm()
 {
   Serial.println(F("On Challenge Alarm"));
+
+  for (int i = 0; i < 5;) {
+    tcaselect(0);
+    // put your main code here, to run repeatedly:
+    drv.useLRA();
+    drv.setWaveform(0, 47);
+    drv.setWaveform(1, 0);
+    drv.go();
+    i++;
+    delay(1000);
+  }
+  
   events.push(CHALLENGEALARM_TIMEOUT);
   check_triggers();
-
 }
 
 void on_challengealarm_exit()
@@ -457,6 +513,16 @@ void on_inactivityalarm_enter()
 void on_inactivityalarm()
 {
   Serial.println(F("On Inactivity Alarm"));
+  for (int i = 0; i < 5;) {
+    tcaselect(0);
+    // put your main code here, to run repeatedly:
+    drv.useLRA();
+    drv.setWaveform(0, 119);
+    drv.setWaveform(1, 0);
+    drv.go();
+    i++;
+    delay(1000);
+  }
   events.push(INACTIVITYALARM_TIMEOUT);
   check_triggers();
 }
@@ -548,16 +614,21 @@ void transToBLE() {
   //  return true;
 }
 
+void prepFname() {
+  //  //creating file name according to current date
+  DateTime now = clock.now();
+  sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
+  delay (20);
+}
+
 void logToSDcard()
 {
-
-  //  Serial.println(F("SD Card Enter"));
+  Serial.println(F("SD Card Enter"));
 
   uint32_t ts = currTimestamp();
   int hr = currHR ();
   uint32_t steps = currSteps();
 
-  //creating file name according to current date
   DateTime now = clock.now();
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
 
