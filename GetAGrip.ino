@@ -570,7 +570,6 @@ void check_triggers()
 
 uint32_t currTimestamp() {
   tcaselect2(0);
-  clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
   DateTime now = clock.now();
   buf1 = now.unixtime();
 
