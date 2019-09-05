@@ -3,6 +3,10 @@
 
 #define comma ','   // comma ','
 #define USE_ARDUINO_INTERRUPTS false
+#define TCAADDR 0x5A
+#define RTCADDR 0x68
+#define SerialPort Serial1 // Abstract serial monitor debug port
+
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
@@ -15,10 +19,6 @@
 #include "PressureSensor.h"
 #include "MillisTimer.h"
 #include "Adafruit_DRV2605.h"
-
-#define TCAADDR 0x5A
-#define RTCADDR 0x68
-#define SerialPort Serial1 // Abstract serial monitor debug port
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
@@ -35,6 +35,7 @@ void initHR();
 void initAcce();
 void intVib();
 void initPressureSens();
+void intChlngBtn();
 void initFSM();
 
 void on_standby();
@@ -58,6 +59,7 @@ void contLoopCallback();
 void logToSDcard();
 void transToBLE();
 void checkBLECmd();
+void ChlngBtn();
 
 // State machine
 const int PROGMEM STRESS_DETECTED = 1;
@@ -97,6 +99,9 @@ const int PROGMEM CLENCH_THRESHOLD = 60;
 void on_clench(uint16_t pressure);
 void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
+
+//Challenge Button
+int buttonState = 0;
 
 // Data acquisition
 void telemetryTimer_handler(MillisTimer &mt);
@@ -161,6 +166,7 @@ void initHR()
     delay(20);
   }
 }
+
 void initPressureSens()
 {
   // Pressure sensor
@@ -168,6 +174,7 @@ void initPressureSens()
   // and reset or power-cycle the glove.
   pressureSense.begin();
 }
+
 void initAcce()
 {
   //Initialize Accelerometer as StepCounter
@@ -181,6 +188,10 @@ void intVib()
   drv.begin();
   drv.selectLibrary(6);
   drv.useLRA();
+}
+
+void intChlngBtn() {
+  pinMode(CHALLENGE_BUTTON, INPUT);
 }
 
 void initFSM()
@@ -258,6 +269,7 @@ void setup()
   initHR();
   initPressureSens();
   initAcce();
+  intChlngBtn();
   initFSM();
   intVib();
   initTimer();
@@ -279,6 +291,7 @@ void loop()
   fsm_main.run_machine();
   telemetryTimer.run();
   checkBLECmd();
+//  ChlngBtn();
   pressureSense.run();
 }
 
@@ -376,7 +389,6 @@ void tcaselect2(uint8_t i) {
 void on_standby()
 {
   check_triggers();
-  //  Serial.println(F("On Standby"));
 }
 
 void on_standby_enter()
@@ -419,14 +431,22 @@ void on_challenge()
     i++;
     delay(1000);
   }
+
   events.push(CHALLENGE_BUTTON_ACTIVATED);
   check_triggers();
 }
 
 void on_challenge_exit()
 {
-
   Serial.println(F("Challenge exit"));
+}
+
+void ChlngBtn() {
+  buttonState = digitalRead(CHALLENGE_BUTTON);
+    if (buttonState == HIGH) {
+    // turn challenge vibration on/off:
+     events.push(CHALLENGE_BUTTON_ACTIVATED);
+  }
 }
 
 void on_selfreport_enter()
@@ -550,6 +570,7 @@ void check_triggers()
 
 uint32_t currTimestamp() {
   tcaselect2(0);
+  clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
   DateTime now = clock.now();
   buf1 = now.unixtime();
 
@@ -612,19 +633,16 @@ void transToBLE() {
   SerialPort.print(steps);
   SerialPort.println();
 
-  Serial.println(F("Transmit Data to BLE Finished"));
+  Serial.println(F("BLE Transmission Succeed"));
 
   //  return true;
 }
 
 void logToSDcard()
 {
-  Serial.println(F("SD Card Enter"));
-
   uint32_t ts = currTimestamp();
   int hr = currHR ();
   uint32_t steps = currSteps();
-
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
@@ -645,10 +663,10 @@ void logToSDcard()
     // Newline at end of file
     dataFile.println();
     dataFile.close();
-    Serial.println(F("Data Logged to SD Card"));
+    Serial.println(F("SDCard Log Succeed"));
   }
   else
   {
-    Serial.println(F("Error in opening the file!!"));
+    Serial.println(F("Error in opening the file on SD card!!"));
   }
 }
