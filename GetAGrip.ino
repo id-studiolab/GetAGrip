@@ -2,7 +2,7 @@
 // niravmalsatter@gmail.com
 
 #define comma ','   // comma ','
-#define USE_ARDUINO_INTERRUPTS false
+
 #define TCAADDR 0x5A
 #define RTCADDR 0x68
 #define SerialPort Serial1 // Abstract serial monitor debug port
@@ -10,6 +10,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
+#define USE_ARDUINO_INTERRUPTS false
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
@@ -22,10 +23,10 @@
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
-const int CHALLENGE_BUTTON = 6;
-const int HEARTRATE_PIN = 10;
-const int PRESSURE_OUTPUT = 8;
-const int PRESSURE_INPUT = A2;
+const int CHALLENGE_BUTTON = 10;
+const int HEARTRATE_PIN = A1;
+const int PRESSURE_OUTPUT = 3;
+const int PRESSURE_INPUT = A0;
 
 void initTimer();
 void initBLE();
@@ -85,8 +86,9 @@ char fname[20];   //array buffer to store filename in char
 // Heartrate
 byte samplesUntilReport;
 const byte SAMPLES_PER_SERIAL_SAMPLE = 10;
-const int PROGMEM HEARTRATE_THRESHOLD = 550;
+const int PROGMEM HEARTRATE_THRESHOLD = 540;
 PulseSensorPlayground pulseSensor;
+int myBPM;
 
 //Step Counter (Accelerometer)
 uint32_t step = 0;
@@ -191,7 +193,8 @@ void intVib()
 }
 
 void intChlngBtn() {
-  pinMode(CHALLENGE_BUTTON, INPUT);
+  pinMode(CHALLENGE_BUTTON, INPUT_PULLUP);
+  //  attachInterrupt(digitalPinToInterrupt(CHALLENGE_BUTTON), ChlngBtn, CHANGE);
 }
 
 void initFSM()
@@ -288,11 +291,12 @@ void setup()
 void loop()
 {
   // All objects invoke callbacks so the whole program is event-driven
+  currHR ();
   fsm_main.run_machine();
   telemetryTimer.run();
   checkBLECmd();
-//  ChlngBtn();
-  pressureSense.run();
+  //  ChlngBtn();
+    pressureSense.run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,10 +405,13 @@ void on_logdata_enter() {
 }
 
 void on_logdata() {
+  Serial.println(F("On LogData"));
+  //  currHR ();
   logToSDcard();
   delay (100);
   transToBLE();
   events.push(LOG_DATA_TIMEOUT);
+  myBPM = 0;
   check_triggers();
 }
 
@@ -442,11 +449,8 @@ void on_challenge_exit()
 }
 
 void ChlngBtn() {
-  buttonState = digitalRead(CHALLENGE_BUTTON);
-    if (buttonState == HIGH) {
-    // turn challenge vibration on/off:
-     events.push(CHALLENGE_BUTTON_ACTIVATED);
-  }
+  events.push(CHALLENGE_BUTTON_ACTIVATED);
+  Serial.println("Btn_Pressed");
 }
 
 void on_selfreport_enter()
@@ -578,37 +582,33 @@ uint32_t currTimestamp() {
   return buf1;
 }
 
-int currHR () {
+void currHR () {
 
-  unsigned long starttime = millis();
-  unsigned long endtime = starttime;
+  pulseSensor.resume();
+  int signal = analogRead(HEARTRATE_PIN);
+  
+  if (pulseSensor.sawNewSample()) {
 
-  int myBPM;
-  //
-  while ((endtime - starttime) <= 1000) // do this loop for up to 1000mS
-  {
-    if (pulseSensor.sawNewSample()) {
+    if (--samplesUntilReport == (byte) 0) {
+      samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
 
-      if (--samplesUntilReport == (byte) 0) {
-        samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
-
+      if (pulseSensor.sawStartOfBeat()) {
+      
         myBPM = pulseSensor.getBeatsPerMinute();
-        if (pulseSensor.sawStartOfBeat()) {
-          Serial.print (myBPM);
-          return myBPM;
-        }
-        else {
-          Serial.println ("HR Failed");
-          return 0;
-        }
+        Serial.println(myBPM);
       }
     }
+
+    pulseSensor.pause();
+    /*******
+      Here is a good place to add code that could take up
+      to a millisecond or so to run.
+    *******/
   }
 }
 
-uint32_t currSteps () {
+int currSteps () {
   step = bma456.getStepCounterOutput();
-  return step;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -617,19 +617,18 @@ uint32_t currSteps () {
 ////////////////////////////////////////////////////////////////////////////////
 
 void transToBLE() {
-  //  Serial.println(F("Transmit Data to BLE Begin"));
+
+  Serial.println(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
-  int hr = currHR ();
-  uint32_t steps = currSteps();
 
   SerialPort.print(F("t"));
   SerialPort.print(ts);
   SerialPort.print(comma);
   SerialPort.print(F("h"));
-  SerialPort.print(hr);
+  SerialPort.print(myBPM);
   SerialPort.print(comma);
   SerialPort.print(F("s"));
-  SerialPort.print(steps);
+  SerialPort.print(step);
   SerialPort.println();
 
   Serial.println(F("BLE Transmission Succeed"));
@@ -639,9 +638,8 @@ void transToBLE() {
 
 void logToSDcard()
 {
+
   uint32_t ts = currTimestamp();
-  int hr = currHR ();
-  uint32_t steps = currSteps();
 
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
@@ -655,10 +653,10 @@ void logToSDcard()
     dataFile.print(comma);
     // Datafields (HR and Steps)
     dataFile.print(F("h"));
-    dataFile.print(hr);
+    dataFile.print(myBPM);
     dataFile.print(comma);
     dataFile.print(F("s"));
-    dataFile.print(steps);
+    dataFile.print(step);
     // Newline at end of file
     dataFile.println();
     dataFile.close();
