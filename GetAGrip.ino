@@ -86,7 +86,7 @@ char fname[20];   //array buffer to store filename in char
 // Heartrate
 byte samplesUntilReport;
 const byte SAMPLES_PER_SERIAL_SAMPLE = 10;
-const int PROGMEM HEARTRATE_THRESHOLD = 540;
+const int PROGMEM HEARTRATE_THRESHOLD = 550;
 PulseSensorPlayground pulseSensor;
 int myBPM;
 
@@ -248,7 +248,7 @@ void initFSM()
 
 void initTimer() {
   // Data acquisition setup
-  telemetryTimer.setInterval(5000);
+  telemetryTimer.setInterval(1000);
   telemetryTimer.expiredHandler(telemetryTimer_handler);
   telemetryTimer.setRepeats(0); // 0 = Forever
   telemetryTimer.start();
@@ -296,7 +296,7 @@ void loop()
   telemetryTimer.run();
   checkBLECmd();
   //  ChlngBtn();
-    pressureSense.run();
+  //  pressureSense.run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -585,17 +585,17 @@ uint32_t currTimestamp() {
 void currHR () {
 
   pulseSensor.resume();
-  int signal = analogRead(HEARTRATE_PIN);
-  
+//  int signal = analogRead(HEARTRATE_PIN);
+//  Serial.println(signal);
   if (pulseSensor.sawNewSample()) {
 
     if (--samplesUntilReport == (byte) 0) {
       samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
 
       if (pulseSensor.sawStartOfBeat()) {
-      
+
         myBPM = pulseSensor.getBeatsPerMinute();
-        Serial.println(myBPM);
+        //        Serial.println(myBPM);
       }
     }
 
