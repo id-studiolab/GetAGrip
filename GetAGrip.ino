@@ -20,6 +20,8 @@
 #include "PressureSensor.h"
 #include "MillisTimer.h"
 #include "Adafruit_DRV2605.h"
+#include <AceButton.h>
+using namespace ace_button;
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
@@ -54,13 +56,9 @@ void on_inactivityalarm_exit();
 void on_logdata_enter();
 void on_logdata();
 void on_logdata_exit();
-void check_triggers();
-void logDataCallback();
-void contLoopCallback();
 void logToSDcard();
 void transToBLE();
 void checkBLECmd();
-void ChlngBtn();
 
 // State machine
 const int PROGMEM STRESS_DETECTED = 1;
@@ -86,7 +84,7 @@ char fname[20];   //array buffer to store filename in char
 // Heartrate
 byte samplesUntilReport;
 const byte SAMPLES_PER_SERIAL_SAMPLE = 10;
-const int PROGMEM HEARTRATE_THRESHOLD = 550;
+const int PROGMEM HEARTRATE_THRESHOLD = 555;
 PulseSensorPlayground pulseSensor;
 int myBPM;
 
@@ -95,6 +93,7 @@ uint32_t step = 0;
 
 // Vibration
 Adafruit_DRV2605 drv;
+bool isVibON = 0;
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -103,11 +102,13 @@ void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
 
 //Challenge Button
-int buttonState = 0;
+AceButton button(CHALLENGE_BUTTON);
+int buttonState = 0;         // variable for reading the pushbutton status
+void handleBtnEvent(AceButton*, uint8_t, uint8_t);
 
 // Data acquisition
 void telemetryTimer_handler(MillisTimer &mt);
-MillisTimer telemetryTimer = MillisTimer(1000); // Take a snapshot of all the date once every 5 seconds
+MillisTimer telemetryTimer = MillisTimer(5000); // Take a snapshot of all the date once every 5 seconds
 
 //Defining States for state machine machine to run
 State state_standby(&on_standby_enter, &on_standby, NULL);
@@ -194,7 +195,10 @@ void intVib()
 
 void intChlngBtn() {
   pinMode(CHALLENGE_BUTTON, INPUT_PULLUP);
-  //  attachInterrupt(digitalPinToInterrupt(CHALLENGE_BUTTON), ChlngBtn, CHANGE);
+  ButtonConfig* buttonConfig = button.getButtonConfig();
+  buttonConfig->setEventHandler(handleBtnEvent);
+  buttonConfig->setFeature(ButtonConfig::kFeatureClick);
+  buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
 }
 
 void initFSM()
@@ -248,11 +252,12 @@ void initFSM()
 
 void initTimer() {
   // Data acquisition setup
-  telemetryTimer.setInterval(1000);
+  telemetryTimer.setInterval(5000);
   telemetryTimer.expiredHandler(telemetryTimer_handler);
   telemetryTimer.setRepeats(0); // 0 = Forever
   telemetryTimer.start();
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // SETUP FUNCTION, All initialisations happen here                            //
@@ -295,7 +300,7 @@ void loop()
   fsm_main.run_machine();
   telemetryTimer.run();
   checkBLECmd();
-  //  ChlngBtn();
+  button.check();
   //  pressureSense.run();
 }
 
@@ -362,6 +367,19 @@ void handleBLECommand(char cmd)
   }
 }
 
+void handleBtnEvent(AceButton* /* button */, uint8_t eventType, uint8_t buttonState) {
+  switch (eventType) {
+    case AceButton::kEventClicked:
+      Serial.println("Click");
+      events.push(CHALLENGE_BUTTON_ACTIVATED);
+      break;
+    case AceButton::kEventLongPressed:
+      Serial.println("Long_pressed");
+      events.push(CHALLENGE_BUTTON_ACTIVATED);
+      break;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // GENERAL I2C HANDLERS for getting value from each sensor with I2C bus.      //
@@ -390,14 +408,14 @@ void tcaselect2(uint8_t i) {
 // main state-machine which handles the bulk of the buisness.                 //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void on_standby()
-{
-  check_triggers();
-}
-
 void on_standby_enter()
 {
   Serial.println(F("Standby enter"));
+}
+
+void on_standby()
+{
+  check_triggers();
 }
 
 void on_logdata_enter() {
@@ -406,7 +424,6 @@ void on_logdata_enter() {
 
 void on_logdata() {
   Serial.println(F("On LogData"));
-  //  currHR ();
   logToSDcard();
   delay (100);
   transToBLE();
@@ -422,35 +439,39 @@ void on_logdata_exit() {
 void on_challenge_enter()
 {
   Serial.println(F("Challenge enter"));
+  telemetryTimer.stop();
 }
 
+unsigned chlng_vib_count = 0;
 void on_challenge()
 {
-  Serial.println(F("On Challenge"));
 
-  for (int i = 0; i < 10;) {
-    tcaselect(0);
-    // put your main code here, to run repeatedly:
-    drv.useLRA();
-    drv.setWaveform(0, 52);
-    drv.setWaveform(1, 0);
-    drv.go();
-    i++;
-    delay(1000);
+  //  Serial.println(F("On Challenge"));
+
+  tcaselect(0);
+  // put your main code here, to run repeatedly:
+  drv.useLRA();
+  drv.setWaveform(0, 83);  // ramp up long 1, see datasheet part 11.2
+  drv.setWaveform(70, 0);  // ramp down long 1, see datasheet part 11.2
+  drv.go();
+  delay(400);
+  currHR();
+  ++ chlng_vib_count;
+  Serial.println(chlng_vib_count);
+  on_logdata();
+  if (chlng_vib_count >= 100)
+  {
+    drv.stop();
+    events.push(CHALLENGE_BUTTON_ACTIVATED);
   }
-
-  events.push(CHALLENGE_BUTTON_ACTIVATED);
   check_triggers();
 }
 
 void on_challenge_exit()
 {
+  chlng_vib_count = 0;
+  telemetryTimer.start();
   Serial.println(F("Challenge exit"));
-}
-
-void ChlngBtn() {
-  events.push(CHALLENGE_BUTTON_ACTIVATED);
-  Serial.println("Btn_Pressed");
 }
 
 void on_selfreport_enter()
@@ -585,8 +606,8 @@ uint32_t currTimestamp() {
 void currHR () {
 
   pulseSensor.resume();
-//  int signal = analogRead(HEARTRATE_PIN);
-//  Serial.println(signal);
+  //  int signal = analogRead(HEARTRATE_PIN);
+  //  Serial.println(signal);
   if (pulseSensor.sawNewSample()) {
 
     if (--samplesUntilReport == (byte) 0) {
@@ -595,7 +616,7 @@ void currHR () {
       if (pulseSensor.sawStartOfBeat()) {
 
         myBPM = pulseSensor.getBeatsPerMinute();
-        //        Serial.println(myBPM);
+//        Serial.println(myBPM);
       }
     }
 
