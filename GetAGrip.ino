@@ -93,7 +93,12 @@ uint32_t step = 0;
 
 // Vibration
 Adafruit_DRV2605 drv;
-bool isVibON = 0;
+unsigned long vib_count = 0;
+unsigned long chlng_vib_rep = 200;
+unsigned long chlng_alarm_rep = 5;
+unsigned long inactivity_alarm_rep = 5;
+unsigned long stress_alarm_rep = 5;
+
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -404,6 +409,79 @@ void tcaselect2(uint8_t i) {
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
+// DIFFERENT VIBRATION PATTERNS FOR EACH ALARM AND TASK                       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+void chlng_vib () {
+  tcaselect(0);
+  // put your main code here, to run repeatedly:
+  drv.useLRA();
+  drv.setWaveform(0, 83);  // ramp up long 1, see datasheet part 11.2
+  drv.setWaveform(70, 0);  // ramp down long 1, see datasheet part 11.2
+  drv.go();
+  delay(400);
+  ++ vib_count;
+  Serial.println(vib_count);
+  if (vib_count >= chlng_vib_rep)
+  {
+    drv.stop();
+    events.push(CHALLENGE_BUTTON_ACTIVATED);
+  }
+}
+
+void challengeAlarm() {
+  tcaselect(0);
+  // put your main code here, to run repeatedly:
+  drv.useLRA();
+  drv.setWaveform(0, 47);
+  drv.setWaveform(1, 0);
+  drv.go();
+  delay(400);
+  ++ vib_count;
+  Serial.println(vib_count);
+  if (vib_count >= chlng_alarm_rep)
+  {
+    drv.stop();
+    events.push(CHALLENGEALARM_TIMEOUT);
+  }
+}
+
+void inactivityAlarm() {
+  tcaselect(0);
+  // put your main code here, to run repeatedly:
+  drv.useLRA();
+  drv.setWaveform(0, 119);
+  drv.setWaveform(1, 0);
+  drv.go();
+  delay(400);
+  ++ vib_count;
+  Serial.println(vib_count);
+  if (vib_count >= inactivity_alarm_rep)
+  {
+    drv.stop();
+    events.push(INACTIVITYALARM_TIMEOUT);
+  }
+}
+
+void stressAlarm() {
+  tcaselect(0);
+  // put your main code here, to run repeatedly:
+  drv.useLRA();
+  drv.setWaveform(0, 7);
+  drv.setWaveform(1, 0);
+  drv.go();
+  delay(1000);
+  ++ vib_count;
+  Serial.println(vib_count);
+  if (vib_count >= stress_alarm_rep)
+  {
+    drv.stop();
+    events.push(STRESSALARM_TIMEOUT);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
 // STATE MACHINE EVENT HANDLERS. These functions are specifically for the     //
 // main state-machine which handles the bulk of the buisness.                 //
 //                                                                            //
@@ -442,36 +520,38 @@ void on_challenge_enter()
   telemetryTimer.stop();
 }
 
-unsigned chlng_vib_count = 0;
 void on_challenge()
 {
-
   //  Serial.println(F("On Challenge"));
-
-  tcaselect(0);
-  // put your main code here, to run repeatedly:
-  drv.useLRA();
-  drv.setWaveform(0, 83);  // ramp up long 1, see datasheet part 11.2
-  drv.setWaveform(70, 0);  // ramp down long 1, see datasheet part 11.2
-  drv.go();
-  delay(400);
+  chlng_vib();
   currHR();
-  ++ chlng_vib_count;
-  Serial.println(chlng_vib_count);
   on_logdata();
-  if (chlng_vib_count >= 100)
-  {
-    drv.stop();
-    events.push(CHALLENGE_BUTTON_ACTIVATED);
-  }
   check_triggers();
 }
 
 void on_challenge_exit()
 {
-  chlng_vib_count = 0;
+  vib_count = 0;
   telemetryTimer.start();
   Serial.println(F("Challenge exit"));
+}
+
+void on_challengealarm_enter()
+{
+  Serial.println(F("Challenge alarm enter"));
+}
+
+void on_challengealarm()
+{
+  Serial.println(F("On Challenge Alarm"));
+  challengeAlarm();
+  check_triggers();
+}
+
+void on_challengealarm_exit()
+{
+  vib_count = 0;
+  Serial.println(F("Challenge alarm exit"));
 }
 
 void on_selfreport_enter()
@@ -499,54 +579,14 @@ void on_stressalarm_enter()
 void on_stressalarm()
 {
   Serial.println(F("On Stress Alarm"));
-
-  for (int i = 0; i < 3;) {
-    tcaselect(0);
-    // put your main code here, to run repeatedly:
-    drv.useLRA();
-    drv.setWaveform(0, 7);
-    drv.setWaveform(1, 0);
-    drv.go();
-    i++;
-    delay(1000);
-  }
-
-  events.push(STRESSALARM_TIMEOUT);
+  stressAlarm();
   check_triggers();
 }
 
 void on_stressalarm_exit()
 {
+  vib_count = 0;
   Serial.println(F("Stressalarm exit"));
-}
-
-void on_challengealarm_enter()
-{
-  Serial.println(F("Challenge alarm enter"));
-}
-
-void on_challengealarm()
-{
-  Serial.println(F("On Challenge Alarm"));
-
-  for (int i = 0; i < 3;) {
-    tcaselect(0);
-    // put your main code here, to run repeatedly:
-    drv.useLRA();
-    drv.setWaveform(0, 47);
-    drv.setWaveform(1, 0);
-    drv.go();
-    i++;
-    delay(1000);
-  }
-
-  events.push(CHALLENGEALARM_TIMEOUT);
-  check_triggers();
-}
-
-void on_challengealarm_exit()
-{
-  Serial.println(F("Challenge alarm exit"));
 }
 
 void on_inactivityalarm_enter()
@@ -557,22 +597,13 @@ void on_inactivityalarm_enter()
 void on_inactivityalarm()
 {
   Serial.println(F("On Inactivity Alarm"));
-  for (int i = 0; i < 3;) {
-    tcaselect(0);
-    // put your main code here, to run repeatedly:
-    drv.useLRA();
-    drv.setWaveform(0, 119);
-    drv.setWaveform(1, 0);
-    drv.go();
-    i++;
-    delay(1000);
-  }
-  events.push(INACTIVITYALARM_TIMEOUT);
+  inactivityAlarm();
   check_triggers();
 }
 
 void on_inactivityalarm_exit()
 {
+  vib_count = 0;
   Serial.println(F("Inactivity alarm exit"));
 }
 
@@ -616,7 +647,7 @@ void currHR () {
       if (pulseSensor.sawStartOfBeat()) {
 
         myBPM = pulseSensor.getBeatsPerMinute();
-//        Serial.println(myBPM);
+        //        Serial.println(myBPM);
       }
     }
 
