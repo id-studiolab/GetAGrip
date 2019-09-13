@@ -5,6 +5,7 @@
 
 #define TCAADDR 0x5A
 #define RTCADDR 0x68
+#define ACCADDR 0x53
 #define SerialPort Serial1 // Abstract serial monitor debug port
 
 #include <SPI.h>
@@ -98,7 +99,6 @@ unsigned long chlng_vib_rep = 200;
 unsigned long chlng_alarm_rep = 5;
 unsigned long inactivity_alarm_rep = 5;
 unsigned long stress_alarm_rep = 5;
-
 
 // Pressure
 const int PROGMEM CLENCH_THRESHOLD = 60;
@@ -302,6 +302,7 @@ void loop()
 {
   // All objects invoke callbacks so the whole program is event-driven
   currHR ();
+  currSteps ();
   fsm_main.run_machine();
   telemetryTimer.run();
   checkBLECmd();
@@ -407,6 +408,13 @@ void tcaselect2(uint8_t i) {
   Wire.begin();
 }
 
+void tcaselect3(uint8_t i) {
+  if (i < 7) return;
+  Wire.beginTransmission(ACCADDR);
+  Wire.write (1 << i);
+  Wire.endTransmission();
+  Wire.begin();
+}
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // DIFFERENT VIBRATION PATTERNS FOR EACH ALARM AND TASK                       //
@@ -506,11 +514,11 @@ void on_logdata() {
   delay (100);
   transToBLE();
   events.push(LOG_DATA_TIMEOUT);
-  myBPM = 0;
   check_triggers();
 }
 
 void on_logdata_exit() {
+  myBPM = 0;
   Serial.println(F("LogData Finished"));
 }
 
@@ -524,8 +532,6 @@ void on_challenge()
 {
   //  Serial.println(F("On Challenge"));
   chlng_vib();
-  currHR();
-  on_logdata();
   check_triggers();
 }
 
@@ -620,7 +626,7 @@ void check_triggers()
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // Data Collection Functions. All the functions related to activate sensors   //
-// and return each sensor value                                               //
+// and return each of value                                               //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -634,7 +640,7 @@ uint32_t currTimestamp() {
   return buf1;
 }
 
-void currHR () {
+int currHR () {
 
   pulseSensor.resume();
   //  int signal = analogRead(HEARTRATE_PIN);
@@ -645,9 +651,8 @@ void currHR () {
       samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
 
       if (pulseSensor.sawStartOfBeat()) {
-
         myBPM = pulseSensor.getBeatsPerMinute();
-        //        Serial.println(myBPM);
+        return true;
       }
     }
 
@@ -660,6 +665,7 @@ void currHR () {
 }
 
 int currSteps () {
+  tcaselect3(0);
   step = bma456.getStepCounterOutput();
 }
 
@@ -692,7 +698,7 @@ void logToSDcard()
 {
 
   uint32_t ts = currTimestamp();
-
+  //  int hr = currHR ();
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
