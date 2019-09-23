@@ -95,7 +95,7 @@ uint32_t step = 0;
 // Vibration
 Adafruit_DRV2605 drv;
 unsigned long vib_count = 0;
-unsigned long chlng_vib_rep = 200;
+unsigned long chlng_vib_rep = 100;
 unsigned long chlng_alarm_rep = 5;
 unsigned long inactivity_alarm_rep = 5;
 unsigned long stress_alarm_rep = 5;
@@ -155,7 +155,7 @@ void initSDCard()
 
 void initClk()
 {
-  //  //Initialize Clock
+  //Initialize Clock
   clock.begin();
   clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
   Serial.println(F("Clock Initialized!"));
@@ -305,9 +305,9 @@ void loop()
   currSteps ();
   fsm_main.run_machine();
   telemetryTimer.run();
+  //  pressureSense.run();
   checkBLECmd();
   button.check();
-  //  pressureSense.run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -315,6 +315,7 @@ void loop()
 // GENERAL EVENT HANDLERS. These functions handle non-state-machine events.   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
+
 void telemetryTimer_handler(MillisTimer &mt)
 {
   events.push(LOG_DATA);
@@ -388,46 +389,43 @@ void handleBtnEvent(AceButton* /* button */, uint8_t eventType, uint8_t buttonSt
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-// GENERAL I2C HANDLERS for getting value from each sensor with I2C bus.      //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
-void tcaselect(uint8_t i) {
-  if (i < 7) return;
-  Wire.beginTransmission(TCAADDR);
-  Wire.write (1 << i);
-  Wire.endTransmission();
-  Wire.begin();
-}
-
-void tcaselect2(uint8_t i) {
-  if (i < 7) return;
-  Wire.beginTransmission(RTCADDR);
-  Wire.write (1 << i);
-  Wire.endTransmission();
-  Wire.begin();
-}
-
-void tcaselect3(uint8_t i) {
-  if (i < 7) return;
-  Wire.beginTransmission(ACCADDR);
-  Wire.write (1 << i);
-  Wire.endTransmission();
-  Wire.begin();
-}
-////////////////////////////////////////////////////////////////////////////////
-//                                                                            //
 // DIFFERENT VIBRATION PATTERNS FOR EACH ALARM AND TASK                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void chlng_vib () {
-  tcaselect(0);
-  // put your main code here, to run repeatedly:
-  drv.useLRA();
-  drv.setWaveform(0, 83);  // ramp up long 1, see datasheet part 11.2
-  drv.setWaveform(70, 0);  // ramp down long 1, see datasheet part 11.2
+void chlngVibPatternUP() {
+  drv.setWaveform(0, 1);
+  drv.setWaveform(1, 123);
+  drv.setWaveform(2, 122);
+  drv.setWaveform(3, 122);
+  drv.setWaveform(4, 121);
+  drv.setWaveform(5, 121);
+  drv.setWaveform(6, 120);
+  drv.setWaveform(7, 119);
   drv.go();
-  delay(400);
+  //  drv.setWaveform(7, 0);
+}
+
+void chlngVibPatternDown() {
+  drv.setWaveform(0, 119);
+  drv.setWaveform(1, 120);
+  drv.setWaveform(2, 121);
+  drv.setWaveform(3, 121);
+  drv.setWaveform(4, 122);
+  drv.setWaveform(5, 122);
+  drv.setWaveform(6, 122);
+  drv.setWaveform(7, 123);
+  drv.go();
+}
+
+void chlng_vib () {
+  // put your main code here, to run repeatedly:
+  SerialPort.println("BreathIn");
+  chlngVibPatternUP();
+  delay(6000);
+  SerialPort.println("BreathOut");
+  chlngVibPatternDown();
+  delay(6000);
+
   ++ vib_count;
   Serial.println(vib_count);
   if (vib_count >= chlng_vib_rep)
@@ -435,16 +433,15 @@ void chlng_vib () {
     drv.stop();
     events.push(CHALLENGE_BUTTON_ACTIVATED);
   }
+  delay(1000);
 }
 
 void challengeAlarm() {
-  tcaselect(0);
   // put your main code here, to run repeatedly:
-  drv.useLRA();
   drv.setWaveform(0, 47);
   drv.setWaveform(1, 0);
   drv.go();
-  delay(400);
+
   ++ vib_count;
   Serial.println(vib_count);
   if (vib_count >= chlng_alarm_rep)
@@ -452,16 +449,15 @@ void challengeAlarm() {
     drv.stop();
     events.push(CHALLENGEALARM_TIMEOUT);
   }
+  delay(20);
 }
 
 void inactivityAlarm() {
-  tcaselect(0);
   // put your main code here, to run repeatedly:
-  drv.useLRA();
   drv.setWaveform(0, 119);
   drv.setWaveform(1, 0);
   drv.go();
-  delay(400);
+
   ++ vib_count;
   Serial.println(vib_count);
   if (vib_count >= inactivity_alarm_rep)
@@ -469,16 +465,15 @@ void inactivityAlarm() {
     drv.stop();
     events.push(INACTIVITYALARM_TIMEOUT);
   }
+  delay(20);
 }
 
 void stressAlarm() {
-  tcaselect(0);
   // put your main code here, to run repeatedly:
-  drv.useLRA();
   drv.setWaveform(0, 7);
   drv.setWaveform(1, 0);
   drv.go();
-  delay(1000);
+
   ++ vib_count;
   Serial.println(vib_count);
   if (vib_count >= stress_alarm_rep)
@@ -486,6 +481,7 @@ void stressAlarm() {
     drv.stop();
     events.push(STRESSALARM_TIMEOUT);
   }
+  delay(1000);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -494,6 +490,7 @@ void stressAlarm() {
 // main state-machine which handles the bulk of the buisness.                 //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
+
 void on_standby_enter()
 {
   Serial.println(F("Standby enter"));
@@ -526,11 +523,15 @@ void on_challenge_enter()
 {
   Serial.println(F("Challenge enter"));
   telemetryTimer.stop();
+  myBPM = 0;
 }
 
 void on_challenge()
 {
   //  Serial.println(F("On Challenge"));
+  currHR();
+  logToSDcard();
+  transToBLE();
   chlng_vib();
   check_triggers();
 }
@@ -626,15 +627,13 @@ void check_triggers()
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 // Data Collection Functions. All the functions related to activate sensors   //
-// and return each of value                                               //
+// and return each of value                                                   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
 uint32_t currTimestamp() {
-  tcaselect2(0);
   DateTime now = clock.now();
   buf1 = now.unixtime();
-
   sprintf(fname, "%02d%02d%02d.csv",  now.year(), now.month(), now.day());
 
   return buf1;
@@ -643,29 +642,25 @@ uint32_t currTimestamp() {
 int currHR () {
 
   pulseSensor.resume();
-  //  int signal = analogRead(HEARTRATE_PIN);
-  //  Serial.println(signal);
   if (pulseSensor.sawNewSample()) {
-
     if (--samplesUntilReport == (byte) 0) {
       samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
 
       if (pulseSensor.sawStartOfBeat()) {
         myBPM = pulseSensor.getBeatsPerMinute();
+        Serial.println(myBPM);
         return true;
       }
     }
-
-    pulseSensor.pause();
     /*******
       Here is a good place to add code that could take up
       to a millisecond or so to run.
     *******/
   }
+  pulseSensor.pause();
 }
 
 int currSteps () {
-  tcaselect3(0);
   step = bma456.getStepCounterOutput();
 }
 
@@ -690,7 +685,6 @@ void transToBLE() {
   SerialPort.println();
 
   Serial.println(F("BLE Transmission Succeed"));
-
   //  return true;
 }
 
@@ -698,7 +692,6 @@ void logToSDcard()
 {
 
   uint32_t ts = currTimestamp();
-  //  int hr = currHR ();
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
