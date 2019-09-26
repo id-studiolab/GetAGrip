@@ -1,6 +1,6 @@
 #include "pressureSensor.h"
 
-// It works like this: The sensor is basically two conductive services separated by a thin layer of foam, forming
+// It works like this: The sensor is basically two conductive surfaces separated by a thin layer of foam, forming
 // a capacitor. This capacitor is paralleled with a small capacitor of aprox. the same capacitance value. First we
 // discharge both capacitors through a digital output set to LOW. Secondly we charge both capacitors through a
 // high-valued resistor and check the analog input connected directly to the two capacitor. Both capacitors will
