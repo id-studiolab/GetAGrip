@@ -10,16 +10,26 @@
 class PressureSensor {
   public:
 
-    PressureSensor(int outputpin_, int inputpin_, uint16_t clenchThreshold_, 
+    PressureSensor(int outputPin_, int inputPin_, uint16_t clenchThreshold_,
                    void (*fpclench)(uint16_t value), void (*fprelease)(uint16_t value), 
                    int numavg = 20)
-      : outputpin_(outputpin_), inputpin_(inputpin_), capSense(numavg), numAvg_(numavg), isClenching_(false),
+      : outputPin_(outputPin_), inputPin_(inputPin_), capSense(numavg), numAvg_(numavg), isClenching_(false),
         clenchThreshold_(clenchThreshold_), pressureValue_(0), event_clench_(fpclench), event_release_(fprelease) {}
     void begin();
     uint16_t pressure();
     void run();
 
   private:
+
+    // BEGIN Statemachine stuff
+    enum class PressureSensorStates_ {
+      Init,                   // Initial state
+      DischargeWait,          // Wait untill discharge is finished
+    };
+
+    PressureSensorStates_ state_;
+
+    // END Statemachine stuff
 
     static const unsigned long  CLENCH_HOLD_DELAY = 2000;   // ms (This one is usefull to configure, 
                                                             //  how long should one clench before it's counted as a clench?)
@@ -28,8 +38,8 @@ class PressureSensor {
     static const unsigned long  MAXVAL = 200;               // Same as above...
     static const int            CAPTHRESHOLD = 800;         // Same as above... here be monsters...
     
-    int outputpin_            = 0;
-    int inputpin_             = 0;
+    int outputPin_            = 0;
+    int inputPin_             = 0;
     bool     isClenching_     = false;
     uint16_t clenchThreshold_ = 0;
     uint16_t pressureValue_   = 0;

@@ -20,10 +20,10 @@ void PressureSensor::begin()
   // Fill average buffer
   for (int i = 0; i < numAvg_; ++i) {
     start_time_ = micros(); // Start timer
-    digitalWrite(outputpin_, HIGH);
-    int capval = analogRead(inputpin_);
+    digitalWrite(outputPin_, HIGH);
+    int capval = analogRead(inputPin_);
     while (capval < CAPTHRESHOLD) {
-      capval = analogRead(inputpin_);
+      capval = analogRead(inputPin_);
       if (micros() - start_time_ > TIMEOUT_MICROS) break;
     }
     stop_time_ = micros();
@@ -35,23 +35,23 @@ void PressureSensor::begin()
 
 void PressureSensor::discharge_()
 {
-  pinMode(outputpin_, OUTPUT);
-  digitalWrite(outputpin_, LOW);
-  pinMode(inputpin_, OUTPUT);
-  digitalWrite(inputpin_, LOW);
+  pinMode(outputPin_, OUTPUT);
+  digitalWrite(outputPin_, LOW);
+  pinMode(inputPin_, OUTPUT);
+  digitalWrite(inputPin_, LOW);
   delay(100);
-  pinMode(inputpin_, INPUT);
+  pinMode(inputPin_, INPUT);
 }
 
 uint16_t PressureSensor::pressure()
 {
   int retval = 0;
   start_time_ = micros(); // Start timer
-  digitalWrite(outputpin_, HIGH);
-  int capval = analogRead(inputpin_);
+  digitalWrite(outputPin_, HIGH);
+  int capval = analogRead(inputPin_);
   
   while (capval < CAPTHRESHOLD) {
-    capval = analogRead(inputpin_);
+    capval = analogRead(inputPin_);
     if (micros() - start_time_ > TIMEOUT_MICROS) break;
   }
   
