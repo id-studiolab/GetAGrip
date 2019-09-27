@@ -10,11 +10,11 @@
 class PressureSensor {
   public:
 
-    PressureSensor(int outputpin, int inputpin, uint16_t clenchThreshold, 
+    PressureSensor(int outputpin_, int inputpin_, uint16_t clenchThreshold_, 
                    void (*fpclench)(uint16_t value), void (*fprelease)(uint16_t value), 
                    int numavg = 20)
-      : outputpin(outputpin), inputpin(inputpin), capSense(numavg), numAvg(numavg), isClenching(false),
-        clenchThreshold(clenchThreshold), event_clench(fpclench), event_release(fprelease) {}
+      : outputpin_(outputpin_), inputpin_(inputpin_), capSense(numavg), numAvg_(numavg), isClenching_(false),
+        clenchThreshold_(clenchThreshold_), pressureValue_(0), event_clench_(fpclench), event_release_(fprelease) {}
     void begin();
     uint16_t pressure();
     void run();
@@ -28,21 +28,20 @@ class PressureSensor {
     static const unsigned long  MAXVAL = 200;               // Same as above...
     static const int            CAPTHRESHOLD = 800;         // Same as above... here be monsters...
     
-    int outputpin;
-    int inputpin;
+    int outputpin_            = 0;
+    int inputpin_             = 0;
+    bool     isClenching_     = false;
+    uint16_t clenchThreshold_ = 0;
+    uint16_t pressureValue_   = 0;
+    uint16_t zeroPressureTime = 0;
+    uint16_t capChargeTime_   = 0;
+    int numAvg_               = 0;
 
-    bool     isClenching;
-    uint16_t clenchThreshold;
-    uint16_t pressureValue;
-    uint16_t zeroPressureTime;
-    uint16_t capChargeTime;
-    int numAvg;
+    unsigned long start_time_ = 0UL;
+    unsigned long stop_time_  = 0UL;
+    movingAvg capSense_{};
 
-    unsigned long start_time;
-    unsigned long stop_time;
-    movingAvg capSense;
-
-    void (*event_clench)(uint16_t pressure);
-    void (*event_release)(uint16_t pressure);
-    void discharge();
+    void (*event_clench_)(uint16_t pressure)  = nullptr;
+    void (*event_release_)(uint16_t pressure) = nullpt;
+    void discharge_();
 };
