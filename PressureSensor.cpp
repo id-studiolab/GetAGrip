@@ -88,7 +88,7 @@ void PressureSensor::run()
     if (clench_initiated) { // we're clenching but not long enough to count
 
       if (pressure_val < prev_pressure_val) { // Declining
-        if (pressure_val <= clenchThreshold / 4) {
+        if (pressure_val <= clenchThreshold_ / 4) {
           clench_initiated = false;
         }
       }
@@ -97,7 +97,7 @@ void PressureSensor::run()
     else {
 
       if (pressure_val > prev_pressure_val) { // Increasing
-        if (pressure_val > clenchThreshold) {
+        if (pressure_val > clenchThreshold_) {
           clench_initiated = true;
           first_clench_detected = true;
           clenchStartMillis = millis();
