@@ -10,14 +10,19 @@ void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
 
 void setup() {
+
   Serial.begin(115200);
+  while (!Serial);
+  Serial.println("Initializing..");
   // put your setup code here, to run once:
   pressureSense.begin();
+  Serial.println("Initialize Finish");
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   pressureSense.run();
+//  Serial.println(analogRead(A0));
 }
 
 void on_clench(uint16_t pressure)

@@ -24,7 +24,7 @@ class PressureSensor {
     static const unsigned long  CLENCH_HOLD_DELAY = 2000;   // ms (This one is usefull to configure, 
                                                             //  how long should one clench before it's counted as a clench?)
     static const unsigned long  PRESSURE_CHECK_DELAY = 500; // ms (This one determines the resolution of the data)
-    static const unsigned long  TIMEOUT_MICROS = 4000;      // Don't touch if you don't fully understand why.
+    static const unsigned long  TIMEOUT_MICROS = 40000;      // Don't touch if you don't fully understand why.
     static const unsigned long  MAXVAL = 200;               // Same as above...
     static const int            CAPTHRESHOLD = 800;         // Same as above... here be monsters...
     

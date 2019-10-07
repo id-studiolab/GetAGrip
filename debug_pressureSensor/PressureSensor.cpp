@@ -44,7 +44,7 @@ void PressureSensor::discharge()
   digitalWrite(inputpin, LOW);
   pinMode(inputpin, INPUT_PULLUP);
 
-  Serial.println ("PressSense Pin Initialized");
+//  Serial.println ("PressSense Pin Initialized");
 }
 
 uint16_t PressureSensor::pressure()
@@ -54,8 +54,10 @@ uint16_t PressureSensor::pressure()
   digitalWrite(outputpin, HIGH);
   int capval = analogRead(inputpin);
   static int avg;
-  while (capval < CAPTHRESHOLD) {
+  //while (capval < CAPTHRESHOLD) {
+  while(1) {
     capval = analogRead(inputpin);
+    Serial.println(capval);
     if (micros() - start_time > TIMEOUT_MICROS) break;
   }
   unsigned long stop_time = micros();
@@ -78,13 +80,13 @@ void PressureSensor::run()
   static unsigned long pressureMillis = 0;
   static unsigned long prev_pressureMillis = 0;
 
-  Serial.println ("PressSense Running");
+//  Serial.println ("PressSense Running");
   
   pressureMillis = millis();
   if (pressureMillis - prev_pressureMillis > PRESSURE_CHECK_DELAY) {
     uint16_t pressure_val = pressure();
 
-    Serial.println(pressure_val); // For debug purpose
+    //Serial.println(pressure_val); // For debug purpose
 
     if (clench_initiated) { // we're clenching but not long enough to count
 
