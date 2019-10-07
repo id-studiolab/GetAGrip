@@ -32,6 +32,8 @@ void PressureSensor::begin()
     discharge();
     zeroPressureTime = capChargeTime;
   }
+
+  Serial.println ("PressSense Begined");
 }
 
 void PressureSensor::discharge()
@@ -40,8 +42,9 @@ void PressureSensor::discharge()
   digitalWrite(outputpin, LOW);
   pinMode(inputpin, OUTPUT);
   digitalWrite(inputpin, LOW);
-  delay(100);
-  pinMode(inputpin, INPUT);
+  pinMode(inputpin, INPUT_PULLUP);
+
+  Serial.println ("PressSense Pin Initialized");
 }
 
 uint16_t PressureSensor::pressure()
@@ -75,11 +78,13 @@ void PressureSensor::run()
   static unsigned long pressureMillis = 0;
   static unsigned long prev_pressureMillis = 0;
 
+  Serial.println ("PressSense Running");
+  
   pressureMillis = millis();
   if (pressureMillis - prev_pressureMillis > PRESSURE_CHECK_DELAY) {
     uint16_t pressure_val = pressure();
 
-    //Serial.println(pressure_val); // For debug purpose
+    Serial.println(pressure_val); // For debug purpose
 
     if (clench_initiated) { // we're clenching but not long enough to count
 
