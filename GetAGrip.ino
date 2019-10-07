@@ -28,8 +28,8 @@ using namespace ace_button;
 const int CHIPSELECT_PIN = 4;
 const int CHALLENGE_BUTTON = 10;
 const int HEARTRATE_PIN = A1;
-const int PRESSURE_OUTPUT = 3;
-const int PRESSURE_INPUT = A0;
+constexpr int PRESSURE_OUTPUT = 3;
+constexpr int PRESSURE_INPUT = A0;
 
 void initTimer();
 void initBLE();
@@ -101,7 +101,7 @@ unsigned long inactivity_alarm_rep = 5;
 unsigned long stress_alarm_rep = 5;
 
 // Pressure
-const int PROGMEM CLENCH_THRESHOLD = 60;
+constexpr int PROGMEM CLENCH_THRESHOLD = 60;
 void on_clench(uint16_t pressure);
 void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
@@ -658,10 +658,12 @@ int currHR () {
     *******/
   }
   pulseSensor.pause();
+  return false;
 }
 
 int currSteps () {
   step = bma456.getStepCounterOutput();
+  return step;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
