@@ -54,8 +54,7 @@ uint16_t PressureSensor::pressure()
   digitalWrite(outputpin, HIGH);
   int capval = analogRead(inputpin);
   static int avg;
-  //while (capval < CAPTHRESHOLD) {
-  while(1) {
+  while (capval < CAPTHRESHOLD) {
     capval = analogRead(inputpin);
     Serial.println(capval);
     if (micros() - start_time > TIMEOUT_MICROS) break;
