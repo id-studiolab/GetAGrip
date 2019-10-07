@@ -9,17 +9,23 @@
 #include <movingAvg.h>
 
 class PressureSensor {
+  private:
+    static constexpr unsigned long  CLENCH_HOLD_DELAY = 2000;   // ms (This one is usefull to configure, 
+                                                            //  how long should one clench before it's counted as a clench?)
+    static constexpr unsigned long  PRESSURE_CHECK_DELAY = 500; // ms (This one determines the resolution of the data)
+    static constexpr int            N_AVERAGING_SAMPLES = 10;   // Number of samples to use for averaging the sensor values
+    
   public:
 
     PressureSensor(int outputPin, int inputPin, uint16_t clenchThreshold,
                    void (*fpclench)(uint16_t value), void (*fprelease)(uint16_t value), 
-                   int numAvg = 20) : 
+                   int numAvg = N_AVERAGING_SAMPLES) : 
       outputPin_(outputPin), 
       inputPin_(inputPin), 
       clenchThreshold_(clenchThreshold), 
       event_clench_(fpclench), 
       event_release_(fprelease), 
-      numAvg_(numAvg)
+      capSense_(numAvg)
     {      
     }
     
@@ -28,6 +34,10 @@ class PressureSensor {
     void run();
 
   private:
+
+    static constexpr unsigned long  TIMEOUT_MICROS = 4000;      // Don't touch if you don't fully understand why.
+    static constexpr unsigned long  MAXVAL = 200;               // Same as above...
+    static constexpr int            CAPTHRESHOLD = 800;         // Same as above... here be monsters...
 
     // BEGIN Statemachine stuff
     enum class PressureSensorStates_ {
@@ -38,14 +48,6 @@ class PressureSensor {
     PressureSensorStates_ state_;
 
     // END Statemachine stuff
-
-    static constexpr unsigned long  CLENCH_HOLD_DELAY = 2000;   // ms (This one is usefull to configure, 
-                                                            //  how long should one clench before it's counted as a clench?)
-    static constexpr unsigned long  PRESSURE_CHECK_DELAY = 500; // ms (This one determines the resolution of the data)
-    static constexpr uint8_t        N_AVERAGING_SAMPLES = 10;   // Number of samples to use for averaging the sensor values
-    static constexpr unsigned long  TIMEOUT_MICROS = 4000;      // Don't touch if you don't fully understand why.
-    static constexpr unsigned long  MAXVAL = 200;               // Same as above...
-    static constexpr int            CAPTHRESHOLD = 800;         // Same as above... here be monsters...
     
     int outputPin_             = 0;
     int inputPin_              = 0;
@@ -58,7 +60,7 @@ class PressureSensor {
 
     unsigned long start_time_ = 0UL;
     unsigned long stop_time_  = 0UL;
-    movingAvg capSense_(;
+    movingAvg capSense_;
 
     void (*event_clench_)(uint16_t pressure)  = nullptr;
     void (*event_release_)(uint16_t pressure) = nullptr;
