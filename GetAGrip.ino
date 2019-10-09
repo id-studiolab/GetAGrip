@@ -398,11 +398,11 @@ void chlngVibPatternUP() {
   drv.setWaveform(2, 122);
   drv.setWaveform(3, 122);
   drv.setWaveform(4, 121);
-  drv.setWaveform(5, 121);
-  drv.setWaveform(6, 120);
-  drv.setWaveform(7, 119);
+  drv.setWaveform(5, 120);
+  drv.setWaveform(6, 119);
+  drv.setWaveform(7, 0);
+  Serial.println("Breath In");
   drv.go();
-  //  drv.setWaveform(7, 0);
 }
 
 void chlngVibPatternDown() {
@@ -412,76 +412,75 @@ void chlngVibPatternDown() {
   drv.setWaveform(3, 121);
   drv.setWaveform(4, 122);
   drv.setWaveform(5, 122);
-  drv.setWaveform(6, 122);
-  drv.setWaveform(7, 123);
+  drv.setWaveform(6, 123);
+  drv.setWaveform(7, 0);
+  Serial.println("Breath Out");
   drv.go();
 }
-
 void chlng_vib () {
-  // put your main code here, to run repeatedly:
-  SerialPort.println("BreathIn");
-  chlngVibPatternUP();
-  delay(6000);
-  SerialPort.println("BreathOut");
-  chlngVibPatternDown();
-  delay(6000);
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
 
-  ++ vib_count;
-  Serial.println(vib_count);
-  if (vib_count >= chlng_vib_rep)
+  while ((endtime - starttime) <= 30000) // do this loop for up to 1000mS
   {
-    drv.stop();
-    events.push(CHALLENGE_BUTTON_ACTIVATED);
+    // code here
+    chlngVibPatternUP();
+    chlngVibPatternDown();
+    endtime = millis();
   }
-  delay(1000);
+  events.push(CHALLENGE_BUTTON_ACTIVATED);
 }
 
 void challengeAlarm() {
-  // put your main code here, to run repeatedly:
-  drv.setWaveform(0, 47);
-  drv.setWaveform(1, 0);
-  drv.go();
+  drv.setWaveform(0, 1);
+  drv.setWaveform(1, 60);
+  drv.setWaveform(2, 0);
 
-  ++ vib_count;
-  Serial.println(vib_count);
-  if (vib_count >= chlng_alarm_rep)
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
+
+  while ((endtime - starttime) <= 5000) // do this loop for up to 1000mS
   {
-    drv.stop();
-    events.push(CHALLENGEALARM_TIMEOUT);
+    // code here
+    drv.go();
+    endtime = millis();
   }
-  delay(20);
+
+  events.push(CHALLENGEALARM_TIMEOUT);
 }
 
 void inactivityAlarm() {
-  // put your main code here, to run repeatedly:
-  drv.setWaveform(0, 119);
-  drv.setWaveform(1, 0);
-  drv.go();
+  drv.setWaveform(0, 1);
+  drv.setWaveform(1, 22);
+  drv.setWaveform(2, 0);
 
-  ++ vib_count;
-  Serial.println(vib_count);
-  if (vib_count >= inactivity_alarm_rep)
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
+
+  while ((endtime - starttime) <= 1000) // do this loop for up to 1000mS
   {
-    drv.stop();
-    events.push(INACTIVITYALARM_TIMEOUT);
+    // code here
+    drv.go();
+    endtime = millis();
   }
-  delay(20);
+  events.push(INACTIVITYALARM_TIMEOUT);
 }
 
 void stressAlarm() {
-  // put your main code here, to run repeatedly:
-  drv.setWaveform(0, 7);
-  drv.setWaveform(1, 0);
-  drv.go();
+  drv.setWaveform(0, 1);
+  drv.setWaveform(1, 45);
+  drv.setWaveform(2, 0);
 
-  ++ vib_count;
-  Serial.println(vib_count);
-  if (vib_count >= stress_alarm_rep)
+  unsigned long starttime = millis();
+  unsigned long endtime = starttime;
+
+  while ((endtime - starttime) <= 5000) // do this loop for up to 1000mS
   {
-    drv.stop();
-    events.push(STRESSALARM_TIMEOUT);
+    // code here
+    drv.go();
+    endtime = millis();
   }
-  delay(1000);
+  events.push(STRESSALARM_TIMEOUT);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -508,7 +507,7 @@ void on_logdata_enter() {
 void on_logdata() {
   Serial.println(F("On LogData"));
   logToSDcard();
-  delay (100);
+  delay (20);
   transToBLE();
   events.push(LOG_DATA_TIMEOUT);
   check_triggers();
@@ -640,7 +639,6 @@ uint32_t currTimestamp() {
 }
 
 int currHR () {
-
   pulseSensor.resume();
   if (pulseSensor.sawNewSample()) {
     if (--samplesUntilReport == (byte) 0) {
