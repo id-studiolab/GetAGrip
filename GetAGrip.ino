@@ -704,8 +704,8 @@ int currSteps () {
   else if (sqrtAcce > 1010) {
     sqrtAcce = sqrtAcce - 1000;
   }
-//  _PP("AcceSqrt: ");
-//  _PL(sqrtAcce);
+  //  _PP("AcceSqrt: ");
+  //  _PL(sqrtAcce);
   return step;
 }
 
@@ -732,6 +732,16 @@ void transToBLE() {
   SerialPort.print(comma);
   SerialPort.print(F("a"));
   SerialPort.print(sqrtAcce);
+  SerialPort.print(comma);
+  SerialPort.print(comma);
+  SerialPort.print(fstressAlarm);
+  SerialPort.print(comma);
+  SerialPort.print(finactivityAlarm);
+  SerialPort.print(comma);
+  SerialPort.print(fchallengePrompt);
+  SerialPort.print(comma);
+  SerialPort.print("c");
+  SerialPort.print(fchallengeVib);
   SerialPort.println();
 
   _PL(F("BLE Transmission Succeed"));
