@@ -21,8 +21,6 @@
 #include "PressureSensor.h"
 #include "MillisTimer.h"
 #include "Adafruit_DRV2605.h"
-#include <AceButton.h>
-using namespace ace_button;
 
 // PIN definitions
 const int CHIPSELECT_PIN = 4;
@@ -104,6 +102,9 @@ bool finactivityAlarm = false;
 bool fchallengePrompt = false;
 bool fstressAlarm = false;
 
+unsigned long timerChallengeBegin = 0;
+unsigned long previousMillis = 0;
+
 // Pressure
 constexpr int PROGMEM CLENCH_THRESHOLD = 60;
 void on_clench(uint16_t pressure);
@@ -111,9 +112,7 @@ void on_release(uint16_t pressure);
 PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
 
 //Challenge Button
-AceButton button(CHALLENGE_BUTTON);
-int buttonState = 0;         // variable for reading the pushbutton status
-void handleBtnEvent(AceButton*, uint8_t, uint8_t);
+bool lastButtonState = 1;
 
 // Data acquisition
 void telemetryTimer_handler(MillisTimer &mt);
@@ -204,10 +203,6 @@ void intVib()
 
 void intChlngBtn() {
   pinMode(CHALLENGE_BUTTON, INPUT_PULLUP);
-  ButtonConfig* buttonConfig = button.getButtonConfig();
-  buttonConfig->setEventHandler(handleBtnEvent);
-  buttonConfig->setFeature(ButtonConfig::kFeatureClick);
-  buttonConfig->setFeature(ButtonConfig::kFeatureLongPress);
 }
 
 void initFSM()
@@ -312,7 +307,6 @@ void loop()
   telemetryTimer.run();
   //  pressureSense.run();
   checkBLECmd();
-  button.check();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -379,17 +373,14 @@ void handleBLECommand(char cmd)
   }
 }
 
-void handleBtnEvent(AceButton* /* button */, uint8_t eventType, uint8_t buttonState) {
-  switch (eventType) {
-    case AceButton::kEventClicked:
-      Serial.println("Click");
-      events.push(CHALLENGE_BUTTON_ACTIVATED);
-      break;
-    case AceButton::kEventLongPressed:
-      Serial.println("Long_pressed");
-      events.push(CHALLENGE_BUTTON_ACTIVATED);
-      break;
+bool handleButton() {
+  bool switchState = 0;
+  if (!digitalRead(CHALLENGE_BUTTON) && lastButtonState) {
+    events.push(CHALLENGE_BUTTON_ACTIVATED);
+    switchState = 1;
   }
+  lastButtonState = digitalRead(CHALLENGE_BUTTON);
+  return switchState;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -421,19 +412,19 @@ void chlngVibPatternDown() {
   Serial.println("Breath Out");
 }
 void chlng_vib () {
-  unsigned long starttime = millis();
-  unsigned long endtime = starttime;
+  //  unsigned long starttime = millis();
+  //  unsigned long endtime = starttime;
 
-  while ((endtime - starttime) <= 30000) // do this loop for up to 1000mS
-  {
-    // code here
-    chlngVibPatternUP();
-    drv.go();
-    chlngVibPatternDown();
-    drv.go();
-    endtime = millis();
-  }
-  events.push(CHALLENGE_BUTTON_ACTIVATED);
+  //  while ((endtime - starttime) <= 30000) // do this loop for up to 1000mS
+  //  {
+  // code here
+  chlngVibPatternUP();
+  drv.go();
+  chlngVibPatternDown();
+  drv.go();
+  //    endtime = millis();
+  //  }
+
 }
 
 void challengeAlarm() {
@@ -502,6 +493,7 @@ void on_standby_enter()
 
 void on_standby()
 {
+  handleButton();
   check_triggers();
 }
 
@@ -529,13 +521,28 @@ void on_challenge_enter()
   fchallengeVib = true;
   telemetryTimer.stop();
   myBPM = 0;
+  timerChallengeBegin = millis();
 }
 
 void on_challenge()
 {
   Serial.println(F("On Challenge"));
-  chlng_vib();
-  check_triggers();
+  currHR ();
+  currSteps ();
+  if (millis() - previousMillis >= 1000) {
+    previousMillis = millis();
+    logToSDcard();
+    transToBLE();
+  }
+  if (!handleButton()) {
+    if (millis() - timerChallengeBegin < 30000) {
+      chlng_vib();
+    } else {
+      drv.stop();
+      events.push(CHALLENGE_BUTTON_ACTIVATED);
+    }
+    check_triggers();
+  }
 }
 
 void on_challenge_exit()
