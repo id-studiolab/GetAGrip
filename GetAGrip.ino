@@ -81,6 +81,8 @@ HM1X_BT bt;
 RTC_DS1307 clock; //define a object of DS1307 class
 uint32_t buf1;    //array buffer to store time data in char
 char fname[20];   //array buffer to store filename in char
+char date[10];   //array buffer to store filename in char
+char timeT[10];   //array buffer to store filename in char
 
 // Heartrate
 byte samplesUntilReport;
@@ -91,14 +93,16 @@ int myBPM;
 
 //Step Counter (Accelerometer)
 uint32_t step = 0;
+float x = 0, y = 0, z = 0;
+double sqrtAcce = 0;
 
 // Vibration
 Adafruit_DRV2605 drv;
-unsigned long vib_count = 0;
-unsigned long chlng_vib_rep = 100;
-unsigned long chlng_alarm_rep = 5;
-unsigned long inactivity_alarm_rep = 5;
-unsigned long stress_alarm_rep = 5;
+
+bool fchallengeVib = false;
+bool finactivityAlarm = false;
+bool fchallengePrompt = false;
+bool fstressAlarm = false;
 
 // Pressure
 constexpr int PROGMEM CLENCH_THRESHOLD = 60;
@@ -303,6 +307,7 @@ void loop()
   // All objects invoke callbacks so the whole program is event-driven
   currHR ();
   currSteps ();
+  actLvl ();
   fsm_main.run_machine();
   telemetryTimer.run();
   //  pressureSense.run();
@@ -402,7 +407,6 @@ void chlngVibPatternUP() {
   drv.setWaveform(6, 119);
   drv.setWaveform(7, 0);
   Serial.println("Breath In");
-  drv.go();
 }
 
 void chlngVibPatternDown() {
@@ -415,7 +419,6 @@ void chlngVibPatternDown() {
   drv.setWaveform(6, 123);
   drv.setWaveform(7, 0);
   Serial.println("Breath Out");
-  drv.go();
 }
 void chlng_vib () {
   unsigned long starttime = millis();
@@ -425,7 +428,9 @@ void chlng_vib () {
   {
     // code here
     chlngVibPatternUP();
+    drv.go();
     chlngVibPatternDown();
+    drv.go();
     endtime = millis();
   }
   events.push(CHALLENGE_BUTTON_ACTIVATED);
@@ -521,96 +526,117 @@ void on_logdata_exit() {
 void on_challenge_enter()
 {
   Serial.println(F("Challenge enter"));
+  fchallengeVib = true;
   telemetryTimer.stop();
   myBPM = 0;
 }
 
 void on_challenge()
 {
-  //  Serial.println(F("On Challenge"));
-  currHR();
-  logToSDcard();
-  transToBLE();
+  Serial.println(F("On Challenge"));
   chlng_vib();
   check_triggers();
 }
 
 void on_challenge_exit()
 {
-  vib_count = 0;
   telemetryTimer.start();
+  fchallengeVib = false;
   Serial.println(F("Challenge exit"));
 }
 
 void on_challengealarm_enter()
 {
   Serial.println(F("Challenge alarm enter"));
+  telemetryTimer.stop();
+  fchallengePrompt = true;
 }
 
 void on_challengealarm()
 {
   Serial.println(F("On Challenge Alarm"));
+  logToSDcard();
+  delay (20);
+  transToBLE();
   challengeAlarm();
   check_triggers();
 }
 
 void on_challengealarm_exit()
 {
-  vib_count = 0;
   Serial.println(F("Challenge alarm exit"));
+  telemetryTimer.start();
+  fchallengePrompt = false;
 }
 
 void on_selfreport_enter()
 {
   Serial.println(F("Selfreport enter"));
+  telemetryTimer.stop();
 }
 
 void on_selfreport()
 {
   Serial.println(F("On Self Report!!"));
-  events.push(LOG_DATA);
+  //  events.push(LOG_DATA);
+  logToSDcard();
+  delay (20);
+  transToBLE();
   check_triggers();
 }
 
 void on_selfreport_exit()
 {
   Serial.println(F("Self Report Succeed!!"));
+  telemetryTimer.start();
 }
 
 void on_stressalarm_enter()
 {
   Serial.println(F("Stressalarm enter"));
+  fstressAlarm = true;
+  telemetryTimer.stop();
 }
 
 void on_stressalarm()
 {
   Serial.println(F("On Stress Alarm"));
+  logToSDcard();
+  delay (20);
+  transToBLE();
   stressAlarm();
   check_triggers();
 }
 
 void on_stressalarm_exit()
 {
-  vib_count = 0;
   Serial.println(F("Stressalarm exit"));
+  fstressAlarm = false;
+  telemetryTimer.start();
 }
 
 void on_inactivityalarm_enter()
 {
   Serial.println(F("Inactivity alarm enter"));
+  finactivityAlarm = true;
+  telemetryTimer.stop();
 }
 
 void on_inactivityalarm()
 {
   Serial.println(F("On Inactivity Alarm"));
+  logToSDcard();
+  delay (20);
+  transToBLE();
   inactivityAlarm();
   check_triggers();
 }
 
 void on_inactivityalarm_exit()
 {
-  vib_count = 0;
   Serial.println(F("Inactivity alarm exit"));
+  finactivityAlarm = false;
+  telemetryTimer.start();
 }
 
 void check_triggers()
@@ -646,7 +672,7 @@ int currHR () {
 
       if (pulseSensor.sawStartOfBeat()) {
         myBPM = pulseSensor.getBeatsPerMinute();
-        Serial.println(myBPM);
+        //        Serial.println(myBPM);
         return true;
       }
     }
@@ -664,6 +690,18 @@ int currSteps () {
   return step;
 }
 
+double actLvl () {
+
+  bma456.getAcceleration(&x, &y, &z);
+  sqrtAcce = sqrt(sq(x) + sq(y) + sq(z)) - 1020;
+  if (sqrtAcce < 1010) {
+    sqrtAcce = 0;
+  }
+  else if (sqrtAcce > 1010) {
+    sqrtAcce = sqrtAcce - 1000;
+  }
+  return sqrtAcce;
+}
 ////////////////////////////////////////////////////////////////////////////////
 //  Log Data: Functuon to log data into SD Card                               //
 //  and Transmit the data over BLE                                            //                                                                            //
@@ -680,8 +718,13 @@ void transToBLE() {
   SerialPort.print(F("h"));
   SerialPort.print(myBPM);
   SerialPort.print(comma);
+  //Squeeze Sensor value
+  SerialPort.print(comma);
   SerialPort.print(F("s"));
   SerialPort.print(step);
+  SerialPort.print(comma);
+  SerialPort.print(F("a"));
+  SerialPort.print(sqrtAcce);
   SerialPort.println();
 
   Serial.println(F("BLE Transmission Succeed"));
@@ -690,24 +733,38 @@ void transToBLE() {
 
 void logToSDcard()
 {
+  DateTime now = clock.now();
+  sprintf(fname, "%02d%02d%02d.csv",  now.day(), now.month(), now.year());
+  sprintf(date, "%02d.%02d.%02d",  now.day(), now.month(), now.year());
+  sprintf(timeT, "%02d:%02d:%02d",  now.hour(), now.minute(), now.second());
 
-  uint32_t ts = currTimestamp();
   // open the file. note that only one file can be open at a time,
   // so you have to close this one before opening another.
   File dataFile = SD.open(fname, FILE_WRITE);
 
   if (dataFile)
   {
-    // Timestamp
-    dataFile.print(F("t"));
-    dataFile.print(ts);
+    dataFile.print(date);
     dataFile.print(comma);
-    // Datafields (HR and Steps)
-    dataFile.print(F("h"));
+    dataFile.print(timeT);
+    dataFile.print(comma);
     dataFile.print(myBPM);
     dataFile.print(comma);
-    dataFile.print(F("s"));
+    dataFile.print("Squeez");
+    dataFile.print(comma);
     dataFile.print(step);
+    dataFile.print(comma);
+    dataFile.print(sqrtAcce);
+    dataFile.print(comma);
+    dataFile.print(comma);
+    dataFile.print(fstressAlarm);
+    dataFile.print(comma);
+    dataFile.print(finactivityAlarm);
+    dataFile.print(comma);
+    dataFile.print(fchallengePrompt);
+    dataFile.print(comma);
+    dataFile.print(fchallengeVib);
+    dataFile.print(comma);
     // Newline at end of file
     dataFile.println();
     dataFile.close();
