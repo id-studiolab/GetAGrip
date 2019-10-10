@@ -2,6 +2,17 @@
 // niravmalsatter@gmail.com
 
 #define comma ','   // comma ','
+// Debug and Test options
+//#define _DEBUG_
+#define _TEST_
+
+#ifdef _DEBUG_
+#define _PP(a) Serial.print(a);
+#define _PL(a) Serial.println(a);
+#else
+#define _PP(a)
+#define _PL(a)
+#endif
 
 #define TCAADDR 0x5A
 #define RTCADDR 0x68
@@ -134,25 +145,25 @@ void initBLE()
 {
   if (bt.begin(SerialPort, 115200) == false)
   {
-    Serial.println(F("Failed to connect to Bluetooth"));
+    _PL(F("Failed to connect to Bluetooth"));
     while (1)
       ;
   }
   else
-    Serial.println(F("Bluetooth Initialized!"));
+    _PL(F("Bluetooth Initialized!"));
 }
 
 void initSDCard()
 {
   if (!SD.begin(CHIPSELECT_PIN))
   {
-    Serial.println(F("ERROR: NO SDCARD DETECTED!"));
+    _PL(F("ERROR: NO SDCARD DETECTED!"));
     while (1)
       ;
   }
   else
   {
-    Serial.println(F("SD Card Initialized"));
+    _PL(F("SD Card Initialized"));
   }
 }
 
@@ -161,7 +172,7 @@ void initClk()
   //Initialize Clock
   clock.begin();
   clock.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  Serial.println(F("Clock Initialized!"));
+  _PL(F("Clock Initialized!"));
 }
 
 void initHR()
@@ -173,7 +184,7 @@ void initHR()
   samplesUntilReport = SAMPLES_PER_SERIAL_SAMPLE;
   if (pulseSensor.begin())
   {
-    Serial.println(F("Heartrate Initialized"));
+    _PL(F("Heartrate Initialized"));
     delay(20);
   }
 }
@@ -191,7 +202,7 @@ void initAcce()
   //Initialize Accelerometer as StepCounter
   bma456.initialize(RANGE_4G, ODR_1600_HZ, NORMAL_AVG4, CONTINUOUS);
   bma456.stepCounterEnable();
-  Serial.println(F("Accelerometer/Step counter Initialized!"));
+  _PL(F("Accelerometer/Step counter Initialized!"));
 }
 
 void intVib()
@@ -272,8 +283,8 @@ void setup()
   Serial.begin(115200);
   Wire.begin();
   delay (1000);
-  Serial.println(F("Arduino started"));
-  Serial.println(F("Start Initialize Sensors"));
+  _PL(F("Arduino started"));
+  _PL(F("Start Initialize Sensors"));
 
   initBLE();
   initSDCard();
@@ -286,8 +297,8 @@ void setup()
   intVib();
   initTimer();
 
-  Serial.println(F("Sensors Initialize Successfully Finished"));
-  Serial.println(F("Start StateMachine"));
+  _PL(F("Sensors Initialize Successfully Finished"));
+  _PL(F("Start StateMachine"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -300,13 +311,11 @@ void setup()
 void loop()
 {
   // All objects invoke callbacks so the whole program is event-driven
-  currHR ();
-  currSteps ();
-  actLvl ();
+
   fsm_main.run_machine();
   telemetryTimer.run();
   //  pressureSense.run();
-  checkBLECmd();
+  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -337,8 +346,8 @@ void on_clench(uint16_t pressure)
 {
   // This will be invoked when we detect that the user is clenching his fist
   // for a (configurable) while. Check PressureSensor.h to configure this.
-  Serial.print("CLENCH EVENT: ");
-  Serial.println(pressure);
+  _PP("CLENCH EVENT: ");
+  _PL(pressure);
 
   events.push(CLENCH_ACTIVATED);
 }
@@ -347,8 +356,8 @@ void on_release(uint16_t pressure)
 {
   // This will be invoked when we detect that the user is releasing his clenched
   // fist.
-  Serial.print(F("CLENCH RELEASE EVENT: "));
-  Serial.println(pressure);
+  _PP(F("CLENCH RELEASE EVENT: "));
+  _PL(pressure);
 
   events.push(CLENCH_DEACTIVATED);
 }
@@ -397,7 +406,7 @@ void chlngVibPatternUP() {
   drv.setWaveform(5, 120);
   drv.setWaveform(6, 119);
   drv.setWaveform(7, 0);
-  Serial.println("Breath In");
+  _PL(F("Breath In"));
 }
 
 void chlngVibPatternDown() {
@@ -409,22 +418,13 @@ void chlngVibPatternDown() {
   drv.setWaveform(5, 122);
   drv.setWaveform(6, 123);
   drv.setWaveform(7, 0);
-  Serial.println("Breath Out");
+  _PL(F("Breath Out"));
 }
 void chlng_vib () {
-  //  unsigned long starttime = millis();
-  //  unsigned long endtime = starttime;
-
-  //  while ((endtime - starttime) <= 30000) // do this loop for up to 1000mS
-  //  {
-  // code here
   chlngVibPatternUP();
   drv.go();
   chlngVibPatternDown();
   drv.go();
-  //    endtime = millis();
-  //  }
-
 }
 
 void challengeAlarm() {
@@ -488,21 +488,25 @@ void stressAlarm() {
 
 void on_standby_enter()
 {
-  Serial.println(F("Standby enter"));
+  _PL(F("Standby enter"));
 }
 
 void on_standby()
 {
   handleButton();
+  currHR ();
+  currSteps ();
+  actLvl ();
+  checkBLECmd();
   check_triggers();
 }
 
 void on_logdata_enter() {
-  Serial.println(F("LogData enter"));
+  _PL(F("LogData enter"));
 }
 
 void on_logdata() {
-  Serial.println(F("On LogData"));
+  _PL(F("On LogData"));
   logToSDcard();
   delay (20);
   transToBLE();
@@ -512,12 +516,12 @@ void on_logdata() {
 
 void on_logdata_exit() {
   myBPM = 0;
-  Serial.println(F("LogData Finished"));
+  _PL(F("LogData Finished"));
 }
 
 void on_challenge_enter()
 {
-  Serial.println(F("Challenge enter"));
+  _PL(F("Challenge enter"));
   fchallengeVib = true;
   telemetryTimer.stop();
   myBPM = 0;
@@ -526,7 +530,7 @@ void on_challenge_enter()
 
 void on_challenge()
 {
-  Serial.println(F("On Challenge"));
+  _PL(F("On Challenge"));
   currHR ();
   currSteps ();
   if (millis() - previousMillis >= 1000) {
@@ -549,19 +553,19 @@ void on_challenge_exit()
 {
   telemetryTimer.start();
   fchallengeVib = false;
-  Serial.println(F("Challenge exit"));
+  _PL(F("Challenge exit"));
 }
 
 void on_challengealarm_enter()
 {
-  Serial.println(F("Challenge alarm enter"));
+  _PL(F("Challenge alarm enter"));
   telemetryTimer.stop();
   fchallengePrompt = true;
 }
 
 void on_challengealarm()
 {
-  Serial.println(F("On Challenge Alarm"));
+  _PL(F("On Challenge Alarm"));
   logToSDcard();
   delay (20);
   transToBLE();
@@ -571,20 +575,20 @@ void on_challengealarm()
 
 void on_challengealarm_exit()
 {
-  Serial.println(F("Challenge alarm exit"));
+  _PL(F("Challenge alarm exit"));
   telemetryTimer.start();
   fchallengePrompt = false;
 }
 
 void on_selfreport_enter()
 {
-  Serial.println(F("Selfreport enter"));
+  _PL(F("Selfreport enter"));
   telemetryTimer.stop();
 }
 
 void on_selfreport()
 {
-  Serial.println(F("On Self Report!!"));
+  _PL(F("On Self Report!!"));
   //  events.push(LOG_DATA);
   logToSDcard();
   delay (20);
@@ -594,20 +598,20 @@ void on_selfreport()
 
 void on_selfreport_exit()
 {
-  Serial.println(F("Self Report Succeed!!"));
+  _PL(F("Self Report Succeed!!"));
   telemetryTimer.start();
 }
 
 void on_stressalarm_enter()
 {
-  Serial.println(F("Stressalarm enter"));
+  _PL(F("Stressalarm enter"));
   fstressAlarm = true;
   telemetryTimer.stop();
 }
 
 void on_stressalarm()
 {
-  Serial.println(F("On Stress Alarm"));
+  _PL(F("On Stress Alarm"));
   logToSDcard();
   delay (20);
   transToBLE();
@@ -617,21 +621,21 @@ void on_stressalarm()
 
 void on_stressalarm_exit()
 {
-  Serial.println(F("Stressalarm exit"));
+  _PL(F("Stressalarm exit"));
   fstressAlarm = false;
   telemetryTimer.start();
 }
 
 void on_inactivityalarm_enter()
 {
-  Serial.println(F("Inactivity alarm enter"));
+  _PL(F("Inactivity alarm enter"));
   finactivityAlarm = true;
   telemetryTimer.stop();
 }
 
 void on_inactivityalarm()
 {
-  Serial.println(F("On Inactivity Alarm"));
+  _PL(F("On Inactivity Alarm"));
   logToSDcard();
   delay (20);
   transToBLE();
@@ -641,7 +645,7 @@ void on_inactivityalarm()
 
 void on_inactivityalarm_exit()
 {
-  Serial.println(F("Inactivity alarm exit"));
+  _PL(F("Inactivity alarm exit"));
   finactivityAlarm = false;
   telemetryTimer.start();
 }
@@ -679,7 +683,7 @@ int currHR () {
 
       if (pulseSensor.sawStartOfBeat()) {
         myBPM = pulseSensor.getBeatsPerMinute();
-        //        Serial.println(myBPM);
+        //        _PL(myBPM);
         return true;
       }
     }
@@ -716,7 +720,7 @@ double actLvl () {
 
 void transToBLE() {
 
-  Serial.println(F("Transmit Data to BLE Begin"));
+  _PL(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
 
   SerialPort.print(F("t"));
@@ -734,7 +738,7 @@ void transToBLE() {
   SerialPort.print(sqrtAcce);
   SerialPort.println();
 
-  Serial.println(F("BLE Transmission Succeed"));
+  _PL(F("BLE Transmission Succeed"));
   //  return true;
 }
 
@@ -775,10 +779,10 @@ void logToSDcard()
     // Newline at end of file
     dataFile.println();
     dataFile.close();
-    Serial.println(F("SDCard Log Succeed"));
+    _PL(F("SDCard Log Succeed"));
   }
   else
   {
-    Serial.println(F("Error in opening the file on SD card!!"));
+    _PL(F("Error in opening the file on SD card!!"));
   }
 }
