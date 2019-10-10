@@ -1,7 +1,6 @@
 // By Nirav Malsattar
 // niravmalsatter@gmail.com
 
-#define comma ','   // comma ','
 // Debug and Test options
 //#define _DEBUG_
 #define _TEST_
@@ -14,6 +13,7 @@
 #define _PL(a)
 #endif
 
+#define comma ','   // comma ','
 #define TCAADDR 0x5A
 #define RTCADDR 0x68
 #define ACCADDR 0x53
@@ -275,7 +275,7 @@ void initTimer() {
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-// SETUP FUNCTION, All initialisations happen here                            //
+// SETUP FUNCTION, All initialisations happ en here                            //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 void setup()
@@ -311,11 +311,10 @@ void setup()
 void loop()
 {
   // All objects invoke callbacks so the whole program is event-driven
-
   fsm_main.run_machine();
   telemetryTimer.run();
   //  pressureSense.run();
-  
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -493,10 +492,9 @@ void on_standby_enter()
 
 void on_standby()
 {
-  handleButton();
   currHR ();
+  handleButton();
   currSteps ();
-  actLvl ();
   checkBLECmd();
   check_triggers();
 }
@@ -683,7 +681,7 @@ int currHR () {
 
       if (pulseSensor.sawStartOfBeat()) {
         myBPM = pulseSensor.getBeatsPerMinute();
-        //        _PL(myBPM);
+        _PL(myBPM);
         return true;
       }
     }
@@ -698,21 +696,19 @@ int currHR () {
 
 int currSteps () {
   step = bma456.getStepCounterOutput();
-  return step;
-}
-
-double actLvl () {
-
   bma456.getAcceleration(&x, &y, &z);
-  sqrtAcce = sqrt(sq(x) + sq(y) + sq(z)) - 1020;
+  sqrtAcce = sqrt(sq(x) + sq(y) + sq(z));
   if (sqrtAcce < 1010) {
     sqrtAcce = 0;
   }
   else if (sqrtAcce > 1010) {
     sqrtAcce = sqrtAcce - 1000;
   }
-  return sqrtAcce;
+//  _PP("AcceSqrt: ");
+//  _PL(sqrtAcce);
+  return step;
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 //  Log Data: Functuon to log data into SD Card                               //
 //  and Transmit the data over BLE                                            //                                                                            //
