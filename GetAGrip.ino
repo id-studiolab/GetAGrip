@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-//#define _DEBUG_
-#define _TEST_
+#define _DEBUG_
+//#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
@@ -29,7 +29,6 @@
 #include <RTClib.h>
 #include "Fsm.h"
 #include "EventQueue.h"
-#include "PressureSensor.h"
 #include "MillisTimer.h"
 #include "Adafruit_DRV2605.h"
 
@@ -37,8 +36,8 @@
 const int CHIPSELECT_PIN = 4;
 const int CHALLENGE_BUTTON = 10;
 const int HEARTRATE_PIN = A1;
-constexpr int PRESSURE_OUTPUT = 3;
-constexpr int PRESSURE_INPUT = A0;
+int PRESSURE_OUTPUT = 3;
+int PRESSURE_INPUT = A0;
 
 void initTimer();
 void initBLE();
@@ -58,14 +57,20 @@ void on_selfreport();
 void on_selfreport_enter();
 void on_selfreport_exit();
 void on_stressalarm_enter();
+void on_stressalarm();
 void on_stressalarm_exit();
 void on_challengealarm_enter();
 void on_challengealarm_exit();
 void on_inactivityalarm_enter();
+void on_inactivityalarm ();
 void on_inactivityalarm_exit();
 void on_logdata_enter();
 void on_logdata();
 void on_logdata_exit();
+void check_triggers();
+uint32_t currTimestamp();
+int currHR();
+int currSteps ();
 void logToSDcard();
 void transToBLE();
 void checkBLECmd();
@@ -117,10 +122,8 @@ unsigned long timerChallengeBegin = 0;
 unsigned long previousMillis = 0;
 
 // Pressure
-constexpr int PROGMEM CLENCH_THRESHOLD = 60;
-void on_clench(uint16_t pressure);
-void on_release(uint16_t pressure);
-PressureSensor pressureSense(PRESSURE_OUTPUT, PRESSURE_INPUT, CLENCH_THRESHOLD, &on_clench, &on_release);
+int long fsrReading = 0;
+int pressureLvl = 0;
 
 //Challenge Button
 bool lastButtonState = 1;
@@ -191,10 +194,10 @@ void initHR()
 
 void initPressureSens()
 {
-  // Pressure sensor
-  // To calibrate the pressure sensor, whear the glove, relax your hand
-  // and reset or power-cycle the glove.
-  pressureSense.begin();
+  pinMode(PRESSURE_OUTPUT, OUTPUT);
+  pinMode(PRESSURE_INPUT, INPUT);
+
+  digitalWrite(PRESSURE_OUTPUT, HIGH);
 }
 
 void initAcce()
@@ -313,7 +316,6 @@ void loop()
   // All objects invoke callbacks so the whole program is event-driven
   fsm_main.run_machine();
   telemetryTimer.run();
-  //  pressureSense.run();
 
 }
 
@@ -339,26 +341,6 @@ void checkBLECmd()
   {
     bt.write((char)SerialPort.read());
   }
-}
-
-void on_clench(uint16_t pressure)
-{
-  // This will be invoked when we detect that the user is clenching his fist
-  // for a (configurable) while. Check PressureSensor.h to configure this.
-  _PP("CLENCH EVENT: ");
-  _PL(pressure);
-
-  events.push(CLENCH_ACTIVATED);
-}
-
-void on_release(uint16_t pressure)
-{
-  // This will be invoked when we detect that the user is releasing his clenched
-  // fist.
-  _PP(F("CLENCH RELEASE EVENT: "));
-  _PL(pressure);
-
-  events.push(CLENCH_DEACTIVATED);
 }
 
 void handleBLECommand(char cmd)
@@ -389,6 +371,17 @@ bool handleButton() {
   }
   lastButtonState = digitalRead(CHALLENGE_BUTTON);
   return switchState;
+}
+
+void pressureSense() {
+  fsrReading = analogRead(PRESSURE_INPUT);
+  if (fsrReading < 900) {
+    events.push(CLENCH_ACTIVATED);
+  }
+  else if (fsrReading > 950) {
+    _PL(" - No pressure");
+    pressureLvl = 0;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -495,6 +488,7 @@ void on_standby()
   currHR ();
   handleButton();
   currSteps ();
+  pressureSense();
   checkBLECmd();
   check_triggers();
 }
@@ -551,6 +545,8 @@ void on_challenge_exit()
 {
   telemetryTimer.start();
   fchallengeVib = false;
+  previousMillis = 0;
+  timerChallengeBegin = 0;
   _PL(F("Challenge exit"));
 }
 
@@ -586,17 +582,65 @@ void on_selfreport_enter()
 
 void on_selfreport()
 {
-  _PL(F("On Self Report!!"));
-  //  events.push(LOG_DATA);
-  logToSDcard();
-  delay (20);
-  transToBLE();
+  //  _PL(F("On Self Report!!"));
+  fsrReading = analogRead(PRESSURE_INPUT);
+
+  //  if (fsrReading < 350) {
+  //    _PL(" - Big squeeze");
+  //    pressureLvl = 3;
+  //    drv.setWaveform (0, 12);
+  //    drv.setWaveform (1, 0);
+  //    _PL(F("Vibration level 3"));
+  //  } else if (fsrReading < 500) {
+  //    _PL(" - Medium squeeze");
+  //    pressureLvl = 2;
+  //    drv.setWaveform (0, 10);
+  //    drv.setWaveform (1, 0);
+  //    _PL(F("Vibration level 2"));
+  //  } else if (fsrReading < 800) {
+  //    _PL(" - Light squeeze");
+  //    pressureLvl = 1;
+  //    drv.setWaveform (0, 1);
+  //    drv.setWaveform (1, 0);
+  //  } else {
+  //    _PL(" - No pressure");
+  //    events.push (CLENCH_DEACTIVATED);
+  //  }
+
+  if (fsrReading < 300) {
+    _PL(" - Big squeeze");
+    pressureLvl = 3;
+    drv.setWaveform (0, 12);
+    drv.setWaveform (1, 0);
+  } else if (fsrReading < 400) {
+    _PL(" - Medium squeeze");
+    pressureLvl = 2;
+    drv.setWaveform (0, 10);
+    drv.setWaveform (1, 0);
+  } else if (fsrReading < 750) {
+    _PL(" - Light squeeze");
+    pressureLvl = 1;
+    drv.setWaveform (0, 1);
+    drv.setWaveform (1, 0);
+  } else {
+    events.push (CLENCH_DEACTIVATED);
+  }
+
+  if (millis() - previousMillis >= 500) {
+    drv.useLRA();
+    drv.go();
+    logToSDcard();
+    transToBLE();
+    previousMillis = millis();
+  }
   check_triggers();
 }
 
 void on_selfreport_exit()
 {
   _PL(F("Self Report Succeed!!"));
+  pressureLvl = 0;
+  previousMillis = 0;
   telemetryTimer.start();
 }
 
@@ -715,8 +759,6 @@ int currSteps () {
 ////////////////////////////////////////////////////////////////////////////////
 
 void transToBLE() {
-
-  _PL(F("Transmit Data to BLE Begin"));
   uint32_t ts = currTimestamp();
 
   SerialPort.print(F("t"));
@@ -725,7 +767,7 @@ void transToBLE() {
   SerialPort.print(F("h"));
   SerialPort.print(myBPM);
   SerialPort.print(comma);
-  //Squeeze Sensor value
+  SerialPort.print (pressureLvl);
   SerialPort.print(comma);
   SerialPort.print(F("s"));
   SerialPort.print(step);
@@ -733,6 +775,7 @@ void transToBLE() {
   SerialPort.print(F("a"));
   SerialPort.print(sqrtAcce);
   SerialPort.print(comma);
+  SerialPort.print (false);
   SerialPort.print(comma);
   SerialPort.print(fstressAlarm);
   SerialPort.print(comma);
@@ -767,12 +810,13 @@ void logToSDcard()
     dataFile.print(comma);
     dataFile.print(myBPM);
     dataFile.print(comma);
-    dataFile.print("Squeez");
+    dataFile.print(pressureLvl);
     dataFile.print(comma);
     dataFile.print(step);
     dataFile.print(comma);
     dataFile.print(sqrtAcce);
     dataFile.print(comma);
+    dataFile.print (false);
     dataFile.print(comma);
     dataFile.print(fstressAlarm);
     dataFile.print(comma);
