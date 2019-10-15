@@ -585,28 +585,6 @@ void on_selfreport()
   //  _PL(F("On Self Report!!"));
   fsrReading = analogRead(PRESSURE_INPUT);
 
-  //  if (fsrReading < 350) {
-  //    _PL(" - Big squeeze");
-  //    pressureLvl = 3;
-  //    drv.setWaveform (0, 12);
-  //    drv.setWaveform (1, 0);
-  //    _PL(F("Vibration level 3"));
-  //  } else if (fsrReading < 500) {
-  //    _PL(" - Medium squeeze");
-  //    pressureLvl = 2;
-  //    drv.setWaveform (0, 10);
-  //    drv.setWaveform (1, 0);
-  //    _PL(F("Vibration level 2"));
-  //  } else if (fsrReading < 800) {
-  //    _PL(" - Light squeeze");
-  //    pressureLvl = 1;
-  //    drv.setWaveform (0, 1);
-  //    drv.setWaveform (1, 0);
-  //  } else {
-  //    _PL(" - No pressure");
-  //    events.push (CLENCH_DEACTIVATED);
-  //  }
-
   if (fsrReading < 300) {
     _PL(" - Big squeeze");
     pressureLvl = 3;
@@ -761,29 +739,31 @@ int currSteps () {
 void transToBLE() {
   uint32_t ts = currTimestamp();
 
-  SerialPort.print(F("t"));
+  SerialPort.print(F("tm"));
   SerialPort.print(ts);
   SerialPort.print(comma);
-  SerialPort.print(F("h"));
+  SerialPort.print(F("hr"));
   SerialPort.print(myBPM);
   SerialPort.print(comma);
+  SerialPort.print(F("sl"));
   SerialPort.print (pressureLvl);
   SerialPort.print(comma);
-  SerialPort.print(F("s"));
+  SerialPort.print(F("st"));
   SerialPort.print(step);
   SerialPort.print(comma);
-  SerialPort.print(F("a"));
+  SerialPort.print(F("ac"));
   SerialPort.print(sqrtAcce);
   SerialPort.print(comma);
-  SerialPort.print (false);
-  SerialPort.print(comma);
+  SerialPort.print(F("sa"));
   SerialPort.print(fstressAlarm);
   SerialPort.print(comma);
+  SerialPort.print(F("ir"));
   SerialPort.print(finactivityAlarm);
   SerialPort.print(comma);
+  SerialPort.print(F("cp"));
   SerialPort.print(fchallengePrompt);
   SerialPort.print(comma);
-  SerialPort.print("c");
+  SerialPort.print("cs");
   SerialPort.print(fchallengeVib);
   SerialPort.println();
 
