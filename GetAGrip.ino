@@ -117,6 +117,10 @@ bool fchallengeVib = false;
 bool finactivityAlarm = false;
 bool fchallengePrompt = false;
 bool fstressAlarm = false;
+int long challengeVib_interval = 30000;
+int long stressAlarm_interval = 5000;
+int long challengePrompt_interval = 5000;
+int long inactivityAlarm_interval = 1000;
 
 unsigned long timerChallengeBegin = 0;
 unsigned long previousMillis = 0;
@@ -149,8 +153,7 @@ void initBLE()
   if (bt.begin(SerialPort, 115200) == false)
   {
     _PL(F("Failed to connect to Bluetooth"));
-    while (1)
-      ;
+    while (1);
   }
   else
     _PL(F("Bluetooth Initialized!"));
@@ -161,8 +164,7 @@ void initSDCard()
   if (!SD.begin(CHIPSELECT_PIN))
   {
     _PL(F("ERROR: NO SDCARD DETECTED!"));
-    while (1)
-      ;
+    while (1);
   }
   else
   {
@@ -375,11 +377,11 @@ bool handleButton() {
 
 void pressureSense() {
   fsrReading = analogRead(PRESSURE_INPUT);
-  if (fsrReading < 900) {
+  if (fsrReading < 800) {
     events.push(CLENCH_ACTIVATED);
   }
-  else if (fsrReading > 950) {
-    _PL(" - No pressure");
+  else if (fsrReading > 800) {
+//    _PL(" - No pressure");
     pressureLvl = 0;
   }
 }
@@ -419,7 +421,7 @@ void chlng_vib () {
   drv.go();
 }
 
-void challengeAlarm() {
+void challengePromptVib() {
   drv.setWaveform(0, 1);
   drv.setWaveform(1, 60);
   drv.setWaveform(2, 0);
@@ -427,7 +429,7 @@ void challengeAlarm() {
   unsigned long starttime = millis();
   unsigned long endtime = starttime;
 
-  while ((endtime - starttime) <= 5000) // do this loop for up to 1000mS
+  while ((endtime - starttime) <= challengePrompt_interval) // do this loop for up to 1000mS
   {
     // code here
     drv.go();
@@ -445,7 +447,7 @@ void inactivityAlarm() {
   unsigned long starttime = millis();
   unsigned long endtime = starttime;
 
-  while ((endtime - starttime) <= 1000) // do this loop for up to 1000mS
+  while ((endtime - starttime) <= inactivityAlarm_interval) // do this loop for up to 1000mS
   {
     // code here
     drv.go();
@@ -462,7 +464,7 @@ void stressAlarm() {
   unsigned long starttime = millis();
   unsigned long endtime = starttime;
 
-  while ((endtime - starttime) <= 5000) // do this loop for up to 1000mS
+  while ((endtime - starttime) <= stressAlarm_interval) // do this loop for up to 1000mS
   {
     // code here
     drv.go();
@@ -531,7 +533,7 @@ void on_challenge()
     transToBLE();
   }
   if (!handleButton()) {
-    if (millis() - timerChallengeBegin < 30000) {
+    if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
     } else {
       drv.stop();
@@ -563,7 +565,7 @@ void on_challengealarm()
   logToSDcard();
   delay (20);
   transToBLE();
-  challengeAlarm();
+  challengePromptVib();
   check_triggers();
 }
 
@@ -585,12 +587,12 @@ void on_selfreport()
   //  _PL(F("On Self Report!!"));
   fsrReading = analogRead(PRESSURE_INPUT);
 
-  if (fsrReading < 300) {
+  if (fsrReading < 550) {
     _PL(" - Big squeeze");
     pressureLvl = 3;
     drv.setWaveform (0, 12);
     drv.setWaveform (1, 0);
-  } else if (fsrReading < 400) {
+  } else if (fsrReading < 650) {
     _PL(" - Medium squeeze");
     pressureLvl = 2;
     drv.setWaveform (0, 10);
@@ -703,6 +705,7 @@ int currHR () {
 
       if (pulseSensor.sawStartOfBeat()) {
         myBPM = pulseSensor.getBeatsPerMinute();
+        _PP("HR: ");
         _PL(myBPM);
         return true;
       }
