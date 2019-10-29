@@ -482,7 +482,6 @@ void stressAlarm() {
 void on_standby_enter()
 {
   _PL(F("Standby enter"));
-  
 }
 
 void on_standby()
