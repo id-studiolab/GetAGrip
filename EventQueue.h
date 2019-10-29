@@ -1,7 +1,8 @@
 // By Richard Bekking
 // richard@electronicsdesign.nl
 
-#pragma ONCE 
+#ifndef EVENTQUEUE_H_
+#define EVENTQUEUE_H_
 
 #include "Fsm.h"
 
@@ -13,7 +14,7 @@ enum QueueState {
 
 class EventQueue {
   public:
-    EventQueue() : queue_top(0), queue_state(EMPTY) { for (int i = 0; i < max_entries; ++i) queue[i] = 0; };
+    EventQueue() = default;
 
     bool push(int value);           // Push an event on top of the stack
     int peek_from_top(int level);   // level = 0 means top of the stack. This function does not mutate the stack.
@@ -22,9 +23,11 @@ class EventQueue {
     QueueState state();             // Returns: READY, FULL or EMPTY
 
   private:
-    enum {max_entries = 5};        // Adjust this if 5 entries is not enough (consumes more memory when larger)
+    enum {max_entries = 12};        // Adjust this if 5 entries is not enough (consumes more memory when larger)
     
-    QueueState queue_state;
-    int queue_top;
-    int queue[max_entries];    
+    QueueState queue_state = {EMPTY};
+    int queue_top = {0};
+    int queue[max_entries] = {};    
 };
+
+#endif // EVENTQUEUE_H_
