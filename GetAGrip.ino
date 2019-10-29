@@ -139,7 +139,7 @@ MillisTimer telemetryTimer = MillisTimer(5000); // Take a snapshot of all the da
 //Defining States for state machine machine to run
 State state_standby(&on_standby_enter, &on_standby, NULL);
 State state_challenge(&on_challenge_enter, &on_challenge, &on_challenge_exit);
-State state_selfreport(&on_selfreport_enter, &on_selfreport, NULL);
+State state_selfreport(&on_selfreport_enter, &on_selfreport, &on_selfreport_exit);
 State state_stressalarm(&on_stressalarm_enter, &on_stressalarm, &on_stressalarm_exit);
 State state_challengealarm(&on_challengealarm_enter, &on_challengealarm, &on_challengealarm_exit);
 State state_inactivityalarm(&on_inactivityalarm_enter, &on_inactivityalarm, &on_inactivityalarm_exit);
@@ -317,8 +317,6 @@ void loop()
 {
   // All objects invoke callbacks so the whole program is event-driven
   fsm_main.run_machine();
-  telemetryTimer.run();
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -381,7 +379,7 @@ void pressureSense() {
     events.push(CLENCH_ACTIVATED);
   }
   else if (fsrReading > 800) {
-//    _PL(" - No pressure");
+    //    _PL(" - No pressure");
     pressureLvl = 0;
   }
 }
@@ -422,6 +420,7 @@ void chlng_vib () {
 }
 
 void challengePromptVib() {
+  
   drv.setWaveform(0, 1);
   drv.setWaveform(1, 60);
   drv.setWaveform(2, 0);
@@ -492,6 +491,7 @@ void on_standby()
   currSteps ();
   pressureSense();
   checkBLECmd();
+  telemetryTimer.run();
   check_triggers();
 }
 
@@ -768,6 +768,8 @@ void transToBLE() {
   SerialPort.print(comma);
   SerialPort.print("cs");
   SerialPort.print(fchallengeVib);
+  SerialPort.print(comma);
+  SerialPort.print("e");
   SerialPort.println();
 
   _PL(F("BLE Transmission Succeed"));
