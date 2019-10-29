@@ -529,13 +529,8 @@ void on_challenge()
   _PL(F("On Challenge"));
   currHR ();
   currSteps ();
-  
-  if (millis() - previousMillis >= 1000) {
-    previousMillis = millis();
-    logToSDcard();
-    transToBLE();
-  }
-  if (handleButton()) {
+
+if (handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
     } else {
@@ -543,6 +538,12 @@ void on_challenge()
       events.push(CHALLENGE_BUTTON_ACTIVATED);
     }
     check_triggers();
+  }
+  
+  if (millis() - previousMillis >= 1000) {
+    previousMillis = millis();
+    logToSDcard();
+    transToBLE();
   }
 }
 
