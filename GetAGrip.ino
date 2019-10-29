@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-#define _DEBUG_
-//#define _TEST_
+//#define _DEBUG_
+#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
