@@ -117,7 +117,7 @@ bool fchallengeVib = false;
 bool finactivityAlarm = false;
 bool fchallengePrompt = false;
 bool fstressAlarm = false;
-int long challengeVib_interval = 30000;
+int long challengeVib_interval = 150000;
 int long stressAlarm_interval = 5000;
 int long challengePrompt_interval = 5000;
 int long inactivityAlarm_interval = 1000;
@@ -287,6 +287,7 @@ void setup()
 {
   Serial.begin(115200);
   Wire.begin();
+  Wire.setClock(400000);
   delay (1000);
   _PL(F("Arduino started"));
   _PL(F("Start Initialize Sensors"));
@@ -528,12 +529,13 @@ void on_challenge()
   _PL(F("On Challenge"));
   currHR ();
   currSteps ();
+  
   if (millis() - previousMillis >= 1000) {
     previousMillis = millis();
     logToSDcard();
     transToBLE();
   }
-  if (!handleButton()) {
+  if (handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
     } else {
