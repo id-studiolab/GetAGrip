@@ -530,7 +530,7 @@ void on_challenge()
   currHR ();
   currSteps ();
 
-if (handleButton()) {
+if (!handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
     } else {
