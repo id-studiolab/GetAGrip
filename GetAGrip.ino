@@ -421,7 +421,7 @@ void chlng_vib () {
 }
 
 void challengePromptVib() {
-  
+
   drv.setWaveform(0, 1);
   drv.setWaveform(1, 60);
   drv.setWaveform(2, 0);
@@ -483,7 +483,7 @@ void stressAlarm() {
 void on_standby_enter()
 {
   _PL(F("Standby enter"));
-  
+
 }
 
 void on_standby()
@@ -529,19 +529,32 @@ void on_challenge()
   _PL(F("On Challenge"));
   currHR ();
   currSteps ();
+  fsrReading = analogRead(PRESSURE_INPUT);
 
-if (!handleButton()) {
+
+  if (!handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
+      if (fsrReading < 500) {
+        _PL(" - Big squeeze");
+        pressureLvl = 3;
+      } else if (fsrReading < 600) {
+        _PL(" - Medium squeeze");
+        pressureLvl = 2;
+      } else if (fsrReading < 700) {
+        _PL(" - Light squeeze");
+        pressureLvl = 1;
+      }
     } else {
       drv.stop();
       events.push(CHALLENGE_BUTTON_ACTIVATED);
     }
     check_triggers();
   }
-  
+
+
   drv.stop();
-  
+
   if (millis() - previousMillis >= 1000) {
     previousMillis = millis();
     logToSDcard();
@@ -590,7 +603,7 @@ void on_selfreport_enter()
 
 void on_selfreport()
 {
-    _PL(F("On Self Report!!"));
+  _PL(F("On Self Report!!"));
   fsrReading = analogRead(PRESSURE_INPUT);
 
   if (fsrReading < 500) {
@@ -750,7 +763,7 @@ int currSteps () {
 void transToBLE() {
   uint32_t ts = currTimestamp();
 
-    SerialPort.print("s");
+  SerialPort.print("s");
   SerialPort.print(F("tm"));
   SerialPort.print(ts);
   SerialPort.print(comma);
@@ -779,7 +792,7 @@ void transToBLE() {
   SerialPort.print(fchallengeVib);
   SerialPort.print(comma);
   SerialPort.print("e");
-  SerialPort.println();
+  SerialPort.println("\r\n");
 
   _PL(F("BLE Transmission Succeed"));
   //  return true;
