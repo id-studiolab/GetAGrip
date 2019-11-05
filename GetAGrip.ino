@@ -540,6 +540,8 @@ if (!handleButton()) {
     check_triggers();
   }
   
+  drv.stop();
+  
   if (millis() - previousMillis >= 1000) {
     previousMillis = millis();
     logToSDcard();
