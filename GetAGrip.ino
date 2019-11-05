@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-//#define _DEBUG_
-#define _TEST_
+#define _DEBUG_
+//#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
@@ -376,10 +376,10 @@ bool handleButton() {
 
 void pressureSense() {
   fsrReading = analogRead(PRESSURE_INPUT);
-  if (fsrReading < 800) {
+  if (fsrReading < 700) {
     events.push(CLENCH_ACTIVATED);
   }
-  else if (fsrReading > 800) {
+  else if (fsrReading > 700) {
     //    _PL(" - No pressure");
     pressureLvl = 0;
   }
@@ -588,25 +588,26 @@ void on_selfreport_enter()
 
 void on_selfreport()
 {
-  //  _PL(F("On Self Report!!"));
+    _PL(F("On Self Report!!"));
   fsrReading = analogRead(PRESSURE_INPUT);
 
-  if (fsrReading < 550) {
+  if (fsrReading < 500) {
     _PL(" - Big squeeze");
     pressureLvl = 3;
     drv.setWaveform (0, 12);
     drv.setWaveform (1, 0);
-  } else if (fsrReading < 650) {
+  } else if (fsrReading < 600) {
     _PL(" - Medium squeeze");
     pressureLvl = 2;
     drv.setWaveform (0, 10);
     drv.setWaveform (1, 0);
-  } else if (fsrReading < 750) {
+  } else if (fsrReading < 700) {
     _PL(" - Light squeeze");
     pressureLvl = 1;
     drv.setWaveform (0, 1);
     drv.setWaveform (1, 0);
   } else {
+    drv.stop();
     events.push (CLENCH_DEACTIVATED);
   }
 
@@ -623,6 +624,7 @@ void on_selfreport()
 void on_selfreport_exit()
 {
   _PL(F("Self Report Succeed!!"));
+  drv.setWaveform (0, 0);
   pressureLvl = 0;
   previousMillis = 0;
   telemetryTimer.start();
@@ -746,6 +748,7 @@ int currSteps () {
 void transToBLE() {
   uint32_t ts = currTimestamp();
 
+    SerialPort.print("s");
   SerialPort.print(F("tm"));
   SerialPort.print(ts);
   SerialPort.print(comma);
