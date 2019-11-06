@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-#define _DEBUG_
-//#define _TEST_
+//#define _DEBUG_
+#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
@@ -22,12 +22,12 @@
 #include <SPI.h>
 #include <SD.h>
 #include <Wire.h>
-#define USE_ARDUINO_INTERRUPTS false
+#define USE_ARDUINO_INTERRUPTS false //Use ths false to tell not to use arduino Interrupt by pulse sensor plaground library
 #include <PulseSensorPlayground.h>
 #include <SparkFun_HM1X_Bluetooth_Arduino_Library.h> // BLE for library for BluetoothMate 4.0  https://github.com/sparkfun/SparkFun_HM1X_Bluetooth_Arduino_Library
 #include "arduino_bma456.h"                          //Step Counter through Accelerometer : https://github.com/Seeed-Studio/Seeed_BMA456
 #include <RTClib.h>
-#include "Fsm.h"
+#include "Fsm.h" //Finite State machine librarary https://github.com/jonblack/arduino-fsm
 #include "EventQueue.h"
 #include "MillisTimer.h"
 #include "Adafruit_DRV2605.h"
