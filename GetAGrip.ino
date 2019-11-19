@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-//#define _DEBUG_
-#define _TEST_
+#define _DEBUG_
+//#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
@@ -117,6 +117,11 @@ bool fchallengeVib = false;
 bool finactivityAlarm = false;
 bool fchallengePrompt = false;
 bool fstressAlarm = false;
+unsigned long chlng_previousMillis = 0;
+unsigned long chlng_currentMillis = 0;
+
+bool doneBreathIn = false;
+bool doneBreathOut = false;
 int long challengeVib_interval = 150000;
 int long stressAlarm_interval = 5000;
 int long challengePrompt_interval = 5000;
@@ -390,7 +395,7 @@ void pressureSense() {
 // DIFFERENT VIBRATION PATTERNS FOR EACH ALARM AND TASK                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
-void chlngVibPatternUP() {
+void breathIn() {
   drv.setWaveform(0, 1);
   drv.setWaveform(1, 123);
   drv.setWaveform(2, 122);
@@ -398,11 +403,13 @@ void chlngVibPatternUP() {
   drv.setWaveform(4, 121);
   drv.setWaveform(5, 120);
   drv.setWaveform(6, 119);
-  drv.setWaveform(7, 0);
+  drv.useLRA();
+  drv.go();
+  doneBreathIn = true;
   _PL(F("Breath In"));
 }
 
-void chlngVibPatternDown() {
+void breathOut() {
   drv.setWaveform(0, 119);
   drv.setWaveform(1, 120);
   drv.setWaveform(2, 121);
@@ -410,14 +417,33 @@ void chlngVibPatternDown() {
   drv.setWaveform(4, 122);
   drv.setWaveform(5, 122);
   drv.setWaveform(6, 123);
-  drv.setWaveform(7, 0);
+  drv.useLRA();
+  drv.go();
+  doneBreathOut = true;
   _PL(F("Breath Out"));
 }
 void chlng_vib () {
-  chlngVibPatternUP();
-  drv.go();
-  chlngVibPatternDown();
-  drv.go();
+  chlng_currentMillis = millis();
+
+  if (chlng_currentMillis - chlng_previousMillis >= 5000) {
+    if (!doneBreathOut) {
+      breathOut();
+
+      Serial.println("OUT");
+    }
+  } else if (chlng_currentMillis - chlng_previousMillis <= 5000) {
+    if (!doneBreathIn) {
+      breathIn();
+
+      Serial.println("IN");
+    }
+  }
+  if (chlng_currentMillis - chlng_previousMillis >= 10000) {
+    // save the last time you blinked the LED
+    doneBreathIn = false;
+    doneBreathOut = false;
+    chlng_previousMillis = chlng_currentMillis;
+  }
 }
 
 void challengePromptVib() {
@@ -522,6 +548,9 @@ void on_challenge_enter()
   telemetryTimer.stop();
   myBPM = 0;
   timerChallengeBegin = millis();
+  chlng_previousMillis = millis();
+  doneBreathIn = false;
+  doneBreathOut = false;
 }
 
 void on_challenge()
@@ -530,7 +559,6 @@ void on_challenge()
   currHR ();
   currSteps ();
   fsrReading = analogRead(PRESSURE_INPUT);
-
 
   if (!handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
@@ -552,8 +580,7 @@ void on_challenge()
     check_triggers();
   }
 
-
-  drv.stop();
+  else drv.stop();
 
   if (millis() - previousMillis >= 1000) {
     previousMillis = millis();
@@ -564,10 +591,13 @@ void on_challenge()
 
 void on_challenge_exit()
 {
-  telemetryTimer.start();
+  drv.setWaveform (0, 0);
+  doneBreathIn = false;
+  doneBreathOut = false;
   fchallengeVib = false;
   previousMillis = 0;
   timerChallengeBegin = 0;
+  telemetryTimer.start();
   _PL(F("Challenge exit"));
 }
 
