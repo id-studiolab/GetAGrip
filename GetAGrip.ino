@@ -2,8 +2,8 @@
 // niravmalsatter@gmail.com
 
 // Debug and Test options
-#define _DEBUG_
-//#define _TEST_
+//#define _DEBUG_
+#define _TEST_
 
 #ifdef _DEBUG_
 #define _PP(a) Serial.print(a);
@@ -53,6 +53,8 @@ void initFSM();
 void on_standby();
 void on_standby_enter();
 void on_challenge_enter();
+void on_challenge();
+void on_challenge_exit();
 void on_selfreport();
 void on_selfreport_enter();
 void on_selfreport_exit();
@@ -60,6 +62,7 @@ void on_stressalarm_enter();
 void on_stressalarm();
 void on_stressalarm_exit();
 void on_challengealarm_enter();
+void on_challengealarm();
 void on_challengealarm_exit();
 void on_inactivityalarm_enter();
 void on_inactivityalarm ();
@@ -428,14 +431,10 @@ void chlng_vib () {
   if (chlng_currentMillis - chlng_previousMillis >= 5000) {
     if (!doneBreathOut) {
       breathOut();
-
-      Serial.println("OUT");
     }
   } else if (chlng_currentMillis - chlng_previousMillis <= 5000) {
     if (!doneBreathIn) {
       breathIn();
-
-      Serial.println("IN");
     }
   }
   if (chlng_currentMillis - chlng_previousMillis >= 10000) {
@@ -509,7 +508,6 @@ void stressAlarm() {
 void on_standby_enter()
 {
   _PL(F("Standby enter"));
-
 }
 
 void on_standby()
@@ -560,6 +558,7 @@ void on_challenge()
   currSteps ();
   fsrReading = analogRead(PRESSURE_INPUT);
 
+
   if (!handleButton()) {
     if (millis() - timerChallengeBegin < challengeVib_interval) {
       chlng_vib();
@@ -579,6 +578,7 @@ void on_challenge()
     }
     check_triggers();
   }
+
 
   else drv.stop();
 
